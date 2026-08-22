@@ -1043,12 +1043,88 @@ async function processMessage(
 ) {
   try {
     console.log(
-      "INSTAGRAM MESSAGE EVENT:",
-      {
-        webhookInstagramUserId,
-        event,
-      }
+      "PROCESSING INSTAGRAM MESSAGE:",
+      JSON.stringify(event, null, 2)
     );
+
+    const senderId =
+      event?.sender?.id
+        ? String(event.sender.id)
+        : null;
+
+    const recipientId =
+      event?.recipient?.id
+        ? String(event.recipient.id)
+        : webhookInstagramUserId;
+
+    const messageId =
+      event?.message?.mid
+        ? String(event.message.mid)
+        : null;
+
+    const text =
+      event?.message?.text
+        ? String(event.message.text)
+        : "";
+
+    if (!senderId || !messageId) {
+      console.warn(
+        "MESSAGE DATA MISSING",
+        {
+          senderId,
+          messageId,
+        }
+      );
+      return;
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: account } =
+      await supabase
+        .from("instagram_accounts")
+        .select("id")
+        .eq(
+          "instagram_user_id",
+          webhookInstagramUserId
+        )
+        .maybeSingle();
+
+    if (!account) {
+      console.warn(
+        "INSTAGRAM ACCOUNT NOT FOUND"
+      );
+      return;
+    }
+
+    const { error } =
+      await supabase
+        .from("instagram_messages")
+        .insert({
+          instagram_message_id: messageId,
+          sender_instagram_id: senderId,
+          recipient_instagram_id: recipientId,
+          message_text: text,
+          direction: "inbound",
+          message_type: "text",
+          is_read: false,
+          raw_payload: event,
+          created_at: new Date().toISOString(),
+          sent_at: new Date().toISOString(),
+        });
+
+    if (error) {
+      console.error(
+        "SAVE INSTAGRAM MESSAGE ERROR:",
+        error
+      );
+      return;
+    }
+
+    console.log(
+      "INSTAGRAM MESSAGE SAVED FOR REALTIME"
+    );
+
   } catch (error) {
     console.error(
       "MESSAGE PROCESSING ERROR:",
