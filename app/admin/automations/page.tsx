@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import AutomationLiveUpdates from "./AutomationLiveUpdates";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,10 @@ export default async function AutomationsPage() {
   } = await supabase.auth.getUser();
 
   if (authError) {
-    console.error("AUTH ERROR:", authError.message);
+    console.error(
+      "AUTH ERROR:",
+      authError.message
+    );
 
     return (
       <main className="min-h-screen bg-[#05070d] p-10 text-white">
@@ -130,14 +134,19 @@ export default async function AutomationsPage() {
 
   const activeCount =
     automationList.filter(
-      (automation) => automation.is_active
+      (automation) =>
+        automation.is_active
     ).length;
 
   const inactiveCount =
-    automationList.length - activeCount;
+    automationList.length -
+    activeCount;
 
   return (
     <main className="min-h-screen bg-[#05070d] text-white">
+      {/* Live Supabase Realtime listener */}
+      <AutomationLiveUpdates />
+
       <header className="border-b border-white/10">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
           <div>
@@ -153,7 +162,8 @@ export default async function AutomationsPage() {
             </h1>
 
             <p className="mt-1 text-sm text-white/40">
-              Manage your Instagram comment-to-DM automations.
+              Manage your Instagram
+              comment-to-DM automations.
             </p>
           </div>
 
@@ -167,7 +177,25 @@ export default async function AutomationsPage() {
       </header>
 
       <div className="mx-auto max-w-6xl px-6 py-10">
+
+        {/* LIVE STATUS */}
+
+        <div className="mb-6 flex items-center gap-2 rounded-xl border border-green-500/10 bg-green-500/5 px-4 py-3">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-green-400" />
+
+          <span className="text-xs font-medium text-green-300">
+            Live updates enabled
+          </span>
+
+          <span className="text-xs text-white/30">
+            Changes appear automatically
+          </span>
+        </div>
+
+        {/* STATS */}
+
         <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
             <p className="text-xs uppercase tracking-wider text-white/30">
               Total
@@ -197,11 +225,17 @@ export default async function AutomationsPage() {
               {inactiveCount}
             </p>
           </div>
+
         </div>
+
+        {/* EMPTY */}
 
         {automationList.length === 0 ? (
           <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-12 text-center">
-            <div className="text-5xl">⚡</div>
+
+            <div className="text-5xl">
+              ⚡
+            </div>
 
             <h2 className="mt-5 text-xl font-semibold">
               No automations yet
@@ -218,18 +252,26 @@ export default async function AutomationsPage() {
             >
               Create Automation
             </Link>
+
           </div>
         ) : (
+
+          /* AUTOMATIONS */
+
           <div className="space-y-5">
+
             {automationList.map(
               (automation) => {
+
                 const keywords =
                   Array.isArray(
                     automation.trigger_keywords
                   )
                     ? automation.trigger_keywords
                     : automation.trigger_keyword
-                      ? [automation.trigger_keyword]
+                      ? [
+                          automation.trigger_keyword,
+                        ]
                       : [];
 
                 const isAnyComment =
@@ -241,9 +283,15 @@ export default async function AutomationsPage() {
                     key={automation.id}
                     className="rounded-3xl border border-white/10 bg-white/[0.03] p-6"
                   >
+
+                    {/* HEADER */}
+
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+
                       <div>
+
                         <div className="flex items-center gap-3">
+
                           <span
                             className={`h-2.5 w-2.5 rounded-full ${
                               automation.is_active
@@ -257,6 +305,7 @@ export default async function AutomationsPage() {
                               ? "Active"
                               : "Inactive"}
                           </span>
+
                         </div>
 
                         <h2 className="mt-3 text-xl font-semibold">
@@ -267,6 +316,7 @@ export default async function AutomationsPage() {
                           Post ID:{" "}
                           {automation.instagram_post_id}
                         </p>
+
                       </div>
 
                       <div
@@ -280,47 +330,74 @@ export default async function AutomationsPage() {
                           ? "Running"
                           : "Paused"}
                       </div>
+
                     </div>
 
+                    {/* DETAILS */}
+
                     <div className="mt-6 grid gap-4 sm:grid-cols-2">
+
+                      {/* TRIGGER */}
+
                       <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+
                         <p className="text-xs uppercase tracking-wider text-white/30">
                           Trigger
                         </p>
 
                         {isAnyComment ? (
+
                           <p className="mt-2 text-lg font-semibold text-purple-300">
                             Any comment
                           </p>
+
                         ) : (
+
                           <>
                             <p className="mt-2 text-xs text-white/30">
                               Specific keywords
                             </p>
 
                             <div className="mt-2 flex flex-wrap gap-2">
-                              {keywords.length > 0 ? (
+
+                              {keywords.length >
+                              0 ? (
+
                                 keywords.map(
-                                  (keyword) => (
+                                  (
+                                    keyword
+                                  ) => (
                                     <span
-                                      key={keyword}
+                                      key={
+                                        keyword
+                                      }
                                       className="rounded-lg bg-blue-500/10 px-3 py-1 text-sm font-medium text-blue-300"
                                     >
-                                      {keyword}
+                                      {
+                                        keyword
+                                      }
                                     </span>
                                   )
                                 )
+
                               ) : (
+
                                 <span className="text-sm text-white/30">
                                   No keywords
                                 </span>
+
                               )}
+
                             </div>
                           </>
                         )}
+
                       </div>
 
+                      {/* STATUS */}
+
                       <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+
                         <p className="text-xs uppercase tracking-wider text-white/30">
                           Status
                         </p>
@@ -336,20 +413,31 @@ export default async function AutomationsPage() {
                             ? "Running"
                             : "Paused"}
                         </p>
+
                       </div>
+
                     </div>
 
+                    {/* MESSAGE */}
+
                     <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+
                       <p className="text-xs uppercase tracking-wider text-white/30">
                         DM message
                       </p>
 
                       <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/70">
-                        {automation.dm_message}
+                        {
+                          automation.dm_message
+                        }
                       </p>
+
                     </div>
 
+                    {/* FOOTER */}
+
                     <div className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
+
                       <div className="text-xs text-white/30">
                         Created{" "}
                         {new Date(
@@ -358,6 +446,7 @@ export default async function AutomationsPage() {
                       </div>
 
                       <div className="flex gap-2">
+
                         <Link
                           href={`/admin/automations/${automation.id}/edit`}
                           className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-white/70 transition hover:bg-white/[0.08] hover:text-white"
@@ -376,14 +465,19 @@ export default async function AutomationsPage() {
                             ? "ON"
                             : "OFF"}
                         </span>
+
                       </div>
+
                     </div>
+
                   </div>
                 );
               }
             )}
+
           </div>
         )}
+
       </div>
     </main>
   );
