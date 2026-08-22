@@ -2,8 +2,6 @@ import Link from "next/link";
 
 import { createClient } from "@/lib/supabase/server";
 
-import AutomationCard from "./AutomationCard";
-
 export const dynamic = "force-dynamic";
 
 type Automation = {
@@ -22,7 +20,7 @@ export default async function AutomationsPage() {
   const supabase = await createClient();
 
   // =========================================================
-  // AUTHENTICATION
+  // AUTH
   // =========================================================
 
   const {
@@ -50,10 +48,6 @@ export default async function AutomationsPage() {
       </main>
     );
   }
-
-  // =========================================================
-  // USER NOT LOGGED IN
-  // =========================================================
 
   if (!user) {
     return (
@@ -107,24 +101,12 @@ export default async function AutomationsPage() {
 
   if (automationError) {
     console.error(
-      "========================================"
-    );
-
-    console.error(
-      "AUTOMATION DATABASE ERROR"
-    );
-
-    console.error(
-      "========================================"
-    );
-
-    console.error(
-      "Message:",
+      "AUTOMATION DATABASE ERROR:",
       automationError.message
     );
 
     console.error(
-      "Code:",
+      "AUTOMATION DATABASE CODE:",
       automationError.code
     );
 
@@ -142,10 +124,6 @@ export default async function AutomationsPage() {
             <h1 className="mt-2 text-2xl font-bold">
               Automations
             </h1>
-
-            <p className="mt-1 text-sm text-white/40">
-              Manage your Instagram comment-to-DM automations.
-            </p>
           </div>
         </header>
 
@@ -156,34 +134,40 @@ export default async function AutomationsPage() {
             </h2>
 
             <p className="mt-4 text-sm text-white/50">
-              Supabase returned the following error:
+              Supabase returned:
             </p>
 
             <pre className="mt-4 overflow-x-auto rounded-xl bg-black/40 p-5 text-sm text-red-300">
               {automationError.message}
             </pre>
 
-            <div className="mt-4 text-xs text-white/40">
-              <p>
-                Code:{" "}
-                <span className="text-white/70">
-                  {automationError.code ||
-                    "unknown"}
-                </span>
-              </p>
-            </div>
+            <p className="mt-4 text-xs text-white/40">
+              Code:{" "}
+              {automationError.code ||
+                "unknown"}
+            </p>
           </div>
         </div>
       </main>
     );
   }
 
-  // =========================================================
-  // AUTOMATION LIST
-  // =========================================================
-
   const automationList =
     (automations ?? []) as Automation[];
+
+  // =========================================================
+  // STATS
+  // =========================================================
+
+  const activeCount =
+    automationList.filter(
+      (automation) =>
+        automation.is_active
+    ).length;
+
+  const inactiveCount =
+    automationList.length -
+    activeCount;
 
   // =========================================================
   // PAGE
@@ -243,12 +227,7 @@ export default async function AutomationsPage() {
             </p>
 
             <p className="mt-2 text-3xl font-bold text-green-400">
-              {
-                automationList.filter(
-                  (automation) =>
-                    automation.is_active
-                ).length
-              }
+              {activeCount}
             </p>
           </div>
 
@@ -258,17 +237,12 @@ export default async function AutomationsPage() {
             </p>
 
             <p className="mt-2 text-3xl font-bold text-yellow-400">
-              {
-                automationList.filter(
-                  (automation) =>
-                    !automation.is_active
-                ).length
-              }
+              {inactiveCount}
             </p>
           </div>
         </div>
 
-        {/* EMPTY STATE */}
+        {/* EMPTY */}
 
         {automationList.length === 0 ? (
           <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-12 text-center">
@@ -293,13 +267,119 @@ export default async function AutomationsPage() {
             </Link>
           </div>
         ) : (
+          /* AUTOMATION CARDS */
+
           <div className="space-y-5">
             {automationList.map(
               (automation) => (
-                <AutomationCard
+                <div
                   key={automation.id}
-                  automation={automation}
-                />
+                  className="rounded-3xl border border-white/10 bg-white/[0.03] p-6"
+                >
+                  {/* TOP */}
+
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`h-2.5 w-2.5 rounded-full ${
+                            automation.is_active
+                              ? "bg-green-400"
+                              : "bg-white/20"
+                          }`}
+                        />
+
+                        <span className="text-xs font-semibold uppercase tracking-wider text-white/40">
+                          {automation.is_active
+                            ? "Active"
+                            : "Inactive"}
+                        </span>
+                      </div>
+
+                      <h2 className="mt-3 text-xl font-semibold">
+                        Comment → DM
+                      </h2>
+
+                      <p className="mt-1 text-sm text-white/30">
+                        Post ID:{" "}
+                        {
+                          automation.instagram_post_id
+                        }
+                      </p>
+                    </div>
+
+                    <div
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        automation.is_active
+                          ? "bg-green-400/10 text-green-400"
+                          : "bg-white/5 text-white/40"
+                      }`}
+                    >
+                      {automation.is_active
+                        ? "Running"
+                        : "Paused"}
+                    </div>
+                  </div>
+
+                  {/* DETAILS */}
+
+                  <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <p className="text-xs uppercase tracking-wider text-white/30">
+                        Trigger keyword
+                      </p>
+
+                      <p className="mt-2 text-lg font-semibold text-blue-300">
+                        {automation.trigger_keyword}
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <p className="text-xs uppercase tracking-wider text-white/30">
+                        Status
+                      </p>
+
+                      <p
+                        className={`mt-2 text-lg font-semibold ${
+                          automation.is_active
+                            ? "text-green-400"
+                            : "text-white/40"
+                        }`}
+                      >
+                        {automation.is_active
+                          ? "Running"
+                          : "Paused"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* DM */}
+
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <p className="text-xs uppercase tracking-wider text-white/30">
+                      DM message
+                    </p>
+
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/70">
+                      {automation.dm_message}
+                    </p>
+                  </div>
+
+                  {/* FOOTER */}
+
+                  <div className="mt-5 flex flex-col gap-2 text-xs text-white/30 sm:flex-row sm:items-center sm:justify-between">
+                    <span>
+                      Created{" "}
+                      {new Date(
+                        automation.created_at
+                      ).toLocaleString()}
+                    </span>
+
+                    <span>
+                      ID: {automation.id}
+                    </span>
+                  </div>
+                </div>
               )
             )}
           </div>
