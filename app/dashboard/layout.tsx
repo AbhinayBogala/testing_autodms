@@ -13,134 +13,312 @@ const navigation = [
   { name: "Settings", href: "/dashboard/settings", icon: "⚙" },
 ];
 
+
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+
   const supabase = await createClient();
 
+
   const {
-    data: { user },
+    data:{user}
   } = await supabase.auth.getUser();
 
-  if (!user) redirect("/login");
 
-  const { data: instagramAccount, error } = await supabase
+  if(!user) redirect("/login");
+
+
+
+  const {data:account}=await supabase
     .from("instagram_accounts")
     .select(
-      "username, profile_picture_url, is_connected, token_expires_at, webhook_subscribed"
+      "username,profile_picture_url,is_connected"
     )
-    .eq("user_id", user.id)
+    .eq(
+      "user_id",
+      user.id
+    )
     .maybeSingle();
 
-  if (error) {
-    console.error("DASHBOARD LAYOUT ACCOUNT ERROR:", error);
-  }
 
-  const connected = Boolean(instagramAccount?.is_connected);
+
+  const connected = Boolean(account?.is_connected);
+
+
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white">
-      <div className="flex min-h-screen">
-        <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-white/10 bg-[#0d0d0d]">
-          <div className="flex h-20 items-center border-b border-white/10 px-6">
+
+    <div className="
+      min-h-screen
+      bg-[#050505]
+      text-white
+    ">
+
+
+      {/* SIDEBAR */}
+
+      <aside
+      className="
+        fixed
+        left-0
+        top-0
+        z-50
+        h-screen
+        w-72
+        border-r
+        border-white/10
+        bg-[#080808]/90
+        backdrop-blur-xl
+        px-5
+        py-6
+      "
+      >
+
+
+        {/* BRAND */}
+
+        <div>
+
+          <h1 className="
+            text-2xl
+            font-bold
+            tracking-tight
+          ">
+            AUTO DM
+          </h1>
+
+
+          <p className="
+            mt-1
+            text-xs
+            text-gray-500
+          ">
+            Instagram Automation
+          </p>
+
+
+        </div>
+
+
+
+
+        {/* ACCOUNT CARD */}
+
+        <div className="
+          mt-8
+          rounded-3xl
+          border
+          border-white/10
+          bg-white/[0.04]
+          p-5
+        ">
+
+
+          <div className="
+            flex
+            items-center
+            gap-3
+          ">
+
+
+            {
+            account?.profile_picture_url ?
+
+            <img
+              src={account.profile_picture_url}
+              alt="Instagram"
+              referrerPolicy="no-referrer"
+              className="
+                h-12
+                w-12
+                rounded-full
+                object-cover
+              "
+            />
+
+            :
+
+            <div
+            className="
+              flex
+              h-12
+              w-12
+              items-center
+              justify-center
+              rounded-full
+              bg-white/10
+            ">
+              ◎
+            </div>
+
+            }
+
+
+
             <div>
-              <div className="text-xl font-bold tracking-tight">
-                AUTO DM
-              </div>
-              <div className="mt-0.5 text-xs text-gray-500">
-                Instagram Automation
-              </div>
+
+              <p className="
+                font-semibold
+              ">
+                @{account?.username ?? "Instagram"}
+              </p>
+
+
+              <p
+              className={
+                connected
+                ?
+                "text-xs text-green-400"
+                :
+                "text-xs text-red-400"
+              }
+              >
+                ● {connected ? "Connected":"Disconnected"}
+              </p>
+
+
             </div>
+
+
           </div>
 
-          <div className="mx-4 mt-5 rounded-xl border border-white/10 bg-white/5 p-3">
-            {instagramAccount ? (
-              <div>
-                <div className="flex items-center gap-3">
-                  {instagramAccount.profile_picture_url ? (
-                    <img
-                      src={instagramAccount.profile_picture_url}
-                      alt={instagramAccount.username ?? "Instagram"}
-                      referrerPolicy="no-referrer"
-                      className="h-9 w-9 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10">
-                      ◎
-                    </div>
-                  )}
 
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      @{instagramAccount.username ?? "Instagram"}
-                    </p>
-                    <p
-                      className={
-                        connected
-                          ? "text-xs text-green-400"
-                          : "text-xs text-red-400"
-                      }
-                    >
-                      ● {connected ? "Connected" : "Disconnected"}
-                    </p>
-                  </div>
-                </div>
 
-                <div className="mt-3">
-                  {connected ? (
-                    <DisconnectInstagramButton />
-                  ) : (
-                    <ConnectInstagramButton label="Connect Instagram" />
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div>
-                <p className="text-sm text-gray-400">
-                  No Instagram account
-                </p>
 
-                <div className="mt-3">
-                  <ConnectInstagramButton label="Connect Instagram" />
-                </div>
-              </div>
-            )}
+          <div className="mt-5">
+
+
+            {
+            connected
+
+            ?
+
+            <DisconnectInstagramButton/>
+
+            :
+
+            <ConnectInstagramButton
+              label="Connect Instagram"
+            />
+
+            }
+
+
           </div>
 
-          <nav className="mt-6 flex-1 overflow-y-auto px-3">
-            <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-600">
-              Workspace
-            </p>
 
-            <div className="space-y-1">
-              {navigation.map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-400 transition hover:bg-white/5 hover:text-white"
-                >
-                  <span className="w-5 text-center text-base">
-                    {item.icon}
-                  </span>
-                  {item.name}
-                </a>
-              ))}
-            </div>
-          </nav>
+        </div>
 
-          <div className="border-t border-white/10 p-4">
-            <p className="truncate text-xs text-gray-500">
-              {user.email}
-            </p>
-          </div>
-        </aside>
 
-        <main className="ml-64 min-h-screen flex-1">
-          {children}
-        </main>
-      </div>
+
+
+
+        {/* NAVIGATION */}
+
+        <nav className="
+          mt-8
+          space-y-2
+        ">
+
+
+        {
+        navigation.map((item)=>(
+
+          <a
+          key={item.href}
+          href={item.href}
+          className="
+            group
+            flex
+            items-center
+            gap-3
+            rounded-xl
+            px-4
+            py-3
+            text-sm
+            text-gray-400
+            transition
+            hover:bg-white/[0.06]
+            hover:text-white
+          "
+          >
+
+
+            <span className="
+              text-lg
+              transition
+              group-hover:scale-110
+            ">
+              {item.icon}
+            </span>
+
+
+            {item.name}
+
+
+          </a>
+
+        ))
+        }
+
+
+        </nav>
+
+
+
+
+        {/* FOOTER */}
+
+        <div className="
+          absolute
+          bottom-6
+          left-5
+          right-5
+          border-t
+          border-white/10
+          pt-5
+        ">
+
+          <p className="
+            truncate
+            text-xs
+            text-gray-500
+          ">
+            {user.email}
+          </p>
+
+        </div>
+
+
+
+      </aside>
+
+
+
+
+
+      {/* PAGE CONTENT */}
+
+      <main
+      className="
+        ml-72
+        min-h-screen
+        px-8
+        py-8
+      "
+      >
+
+        {children}
+
+      </main>
+
+
+
     </div>
+
   );
+
 }
