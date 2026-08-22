@@ -1,0 +1,633 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+
+import { createClient } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
+
+type InstagramPost = {
+  id: string;
+  instagram_media_id: string;
+  caption: string | null;
+  media_type: string | null;
+  media_url: string | null;
+  permalink: string | null;
+  published_at: string | null;
+};
+
+type SearchParams = {
+  error?: string;
+};
+
+export default async function NewAutomationPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const params = await searchParams;
+
+  const supabase = await createClient();
+
+  // =========================================================
+  // AUTH
+  // =========================================================
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    redirect("/login");
+  }
+
+  // =========================================================
+  // CREATE AUTOMATION
+  // =========================================================
+
+  async function createAutomation(formData: FormData) {
+    "use server";
+
+    const supabase = await createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      redirect("/login");
+    }
+
+    const instagramPostId = String(
+      formData.get("instagram_post_id") ?? ""
+    ).trim();
+
+    const triggerKeyword = String(
+      formData.get("trigger_keyword") ?? ""
+    )
+      .trim()
+      .toLowerCase();
+
+    const dmMessage = String(
+      formData.get("dm_message") ?? ""
+    ).trim();
+
+    const isActive =
+      formData.get("is_active") === "on";
+
+    // ---------------------------------------------------------
+    // Validation
+    // ---------------------------------------------------------
+
+    if (!instagramPostId) {
+      redirect(
+        "/admin/automations/new?error=Please+select+an+Instagram+post."
+      );
+    }
+
+    if (!triggerKeyword) {
+      redirect(
+        "/admin/automations/new?error=Please+enter+a+trigger+keyword."
+      );
+    }
+
+    if (!dmMessage) {
+      redirect(
+        "/admin/automations/new?error=Please+enter+a+DM+message."
+      );
+    }
+
+    // ---------------------------------------------------------
+    // Get existing connected Instagram account
+    // ---------------------------------------------------------
+
+    const {
+      data: account,
+      error: accountError,
+    } = await supabase
+      .from("instagram_accounts")
+      .select(
+        "id, instagram_user_id, username, profile_picture_url"
+      )
+      .eq("user_id", user.id)
+      .eq("is_connected", true)
+      .order("connected_at", {
+        ascending: false,
+      })
+      .limit(1)
+      .maybeSingle();
+
+    if (accountError) {
+      console.error(
+        "AUTOMATION ACCOUNT ERROR:",
+        accountError
+      );
+
+      redirect(
+        `/admin/automations/new?error=${encodeURIComponent(
+          accountError.message
+        )}`
+      );
+    }
+
+    if (!account) {
+      redirect(
+        "/admin/automations/new?error=No+connected+Instagram+account+was+found."
+      );
+    }
+
+    // ---------------------------------------------------------
+    // Verify selected post belongs to this account
+    // ---------------------------------------------------------
+
+    const {
+      data: post,
+      error: postError,
+    } = await supabase
+      .from("instagram_posts")
+      .select(
+        "id, instagram_media_id, instagram_account_id"
+      )
+      .eq("id", instagramPostId)
+      .eq("instagram_account_id", account.id)
+      .maybeSingle();
+
+    if (postError) {
+      console.error(
+        "AUTOMATION POST ERROR:",
+        postError
+      );
+
+      redirect(
+        `/admin/automations/new?error=${encodeURIComponent(
+          postError.message
+        )}`
+      );
+    }
+
+    if (!post) {
+      redirect(
+        "/admin/automations/new?error=The+selected+Instagram+post+does+not+belong+to+your+connected+account."
+      );
+    }
+
+    // ---------------------------------------------------------
+    // Check duplicate automation
+    // ---------------------------------------------------------
+
+    const {
+      data: existingAutomation,
+      error: duplicateError,
+    } = await supabase
+      .from("instagram_automations")
+      .select("id")
+      .eq(
+        "instagram_account_id",
+        account.id
+      )
+      .eq(
+        "instagram_post_id",
+        post.instagram_media_id
+      )
+      .eq(
+        "trigger_keyword",
+        triggerKeyword
+      )
+      .maybeSingle();
+
+    if (duplicateError) {
+      console.error(
+        "AUTOMATION DUPLICATE CHECK ERROR:",
+        duplicateError
+      );
+
+      redirect(
+        `/admin/automations/new?error=${encodeURIComponent(
+          duplicateError.message
+        )}`
+      );
+    }
+
+    if (existingAutomation) {
+      redirect(
+        "/admin/automations/new?error=An+automation+with+this+keyword+already+exists+for+this+post."
+      );
+    }
+
+    // ---------------------------------------------------------
+    // Create automation
+    // ---------------------------------------------------------
+
+    const {
+      error: insertError,
+    } = await supabase
+      .from("instagram_automations")
+      .insert({
+        user_id: user.id,
+        instagram_account_id: account.id,
+        instagram_post_id:
+          post.instagram_media_id,
+        trigger_keyword: triggerKeyword,
+        dm_message: dmMessage,
+        is_active: isActive,
+      });
+
+    if (insertError) {
+      console.error(
+        "AUTOMATION CREATE ERROR:",
+        insertError
+      );
+
+      redirect(
+        `/admin/automations/new?error=${encodeURIComponent(
+          insertError.message
+        )}`
+      );
+    }
+
+    redirect("/admin/automations");
+  }
+
+  // =========================================================
+  // LOAD CONNECTED ACCOUNT
+  // =========================================================
+
+  const {
+    data: account,
+    error: accountError,
+  } = await supabase
+    .from("instagram_accounts")
+    .select(
+      "id, instagram_user_id, username, profile_picture_url"
+    )
+    .eq("user_id", user.id)
+    .eq("is_connected", true)
+    .order("connected_at", {
+      ascending: false,
+    })
+    .limit(1)
+    .maybeSingle();
+
+  // =========================================================
+  // LOAD POSTS
+  // =========================================================
+
+  let posts: InstagramPost[] = [];
+  let postsError: string | null = null;
+
+  if (account) {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("instagram_posts")
+      .select(
+        `
+        id,
+        instagram_media_id,
+        caption,
+        media_type,
+        media_url,
+        permalink,
+        published_at
+        `
+      )
+      .eq(
+        "instagram_account_id",
+        account.id
+      )
+      .order("published_at", {
+        ascending: false,
+      })
+      .limit(50);
+
+    if (error) {
+      postsError = error.message;
+    } else {
+      posts = (data ?? []) as InstagramPost[];
+    }
+  }
+
+  const pageError = params.error
+    ? decodeURIComponent(params.error)
+    : null;
+
+  // =========================================================
+  // PAGE
+  // =========================================================
+
+  return (
+    <main className="min-h-screen bg-[#05070d] text-white">
+      <header className="border-b border-white/10">
+        <div className="mx-auto max-w-5xl px-6 py-6">
+          <Link
+            href="/admin/automations"
+            className="text-sm text-white/40 transition hover:text-white"
+          >
+            ← Back to Automations
+          </Link>
+
+          <h1 className="mt-3 text-2xl font-bold">
+            New Automation
+          </h1>
+
+          <p className="mt-1 text-sm text-white/40">
+            Create an Instagram comment-to-DM automation.
+          </p>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-3xl px-6 py-10">
+        {(pageError ||
+          accountError ||
+          postsError) && (
+          <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 p-5">
+            <h2 className="font-semibold text-red-300">
+              Unable to load automation form
+            </h2>
+
+            <p className="mt-2 whitespace-pre-wrap break-words text-sm text-red-200/70">
+              {pageError ||
+                accountError?.message ||
+                postsError}
+            </p>
+          </div>
+        )}
+
+        {!account ? (
+          <div className="rounded-3xl border border-yellow-500/20 bg-yellow-500/10 p-8">
+            <div className="text-4xl">
+              🔗
+            </div>
+
+            <h2 className="mt-4 text-xl font-semibold text-yellow-200">
+              Instagram is not connected
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-yellow-100/60">
+              No active Instagram account was found.
+            </p>
+
+            <Link
+              href="/dashboard"
+              className="mt-6 inline-flex rounded-xl border border-white/10 bg-white/[0.05] px-6 py-3 text-sm font-semibold transition hover:bg-white/[0.1]"
+            >
+              Back to Dashboard
+            </Link>
+          </div>
+        ) : (
+          <>
+            {/* Connected Account */}
+
+            <div className="mb-6 rounded-2xl border border-green-500/20 bg-green-500/10 p-5">
+              <div className="flex items-center gap-3">
+                {account.profile_picture_url ? (
+                  <img
+                    src={
+                      account.profile_picture_url
+                    }
+                    alt=""
+                    className="h-10 w-10 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/20">
+                    ◎
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-green-300/60">
+                    Connected Instagram
+                  </p>
+
+                  <p className="mt-1 font-semibold text-green-100">
+                    @{account.username || "Instagram account"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <form
+              action={createAutomation}
+              className="rounded-3xl border border-white/10 bg-white/[0.03] p-8"
+            >
+              {/* POST */}
+
+              <div>
+                <h2 className="text-lg font-semibold">
+                  1. Select Instagram Post
+                </h2>
+
+                <p className="mt-2 text-sm text-white/40">
+                  Choose the post where comments should
+                  trigger the automation.
+                </p>
+
+                {posts.length === 0 ? (
+                  <div className="mt-5 rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-5">
+                    <p className="font-medium text-yellow-200">
+                      No Instagram posts found.
+                    </p>
+
+                    <p className="mt-2 text-sm text-yellow-100/50">
+                      Sync your Instagram posts from the
+                      dashboard first.
+                    </p>
+
+                    <Link
+                      href="/dashboard"
+                      className="mt-4 inline-flex rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold hover:bg-blue-500"
+                    >
+                      Go to Dashboard
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="mt-5">
+                    <label
+                      htmlFor="instagram_post_id"
+                      className="mb-2 block text-sm font-medium"
+                    >
+                      Post
+                    </label>
+
+                    <select
+                      id="instagram_post_id"
+                      name="instagram_post_id"
+                      required
+                      defaultValue=""
+                      className="w-full rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
+                    >
+                      <option
+                        value=""
+                        disabled
+                      >
+                        Select a post
+                      </option>
+
+                      {posts.map(
+                        (post) => {
+                          const caption =
+                            post.caption
+                              ?.replace(
+                                /\s+/g,
+                                " "
+                              )
+                              .trim();
+
+                          const title =
+                            caption
+                              ? caption.length >
+                                80
+                                ? `${caption.slice(
+                                    0,
+                                    80
+                                  )}...`
+                                : caption
+                              : `Instagram ${
+                                  post.media_type ||
+                                  "Post"
+                                }`;
+
+                          return (
+                            <option
+                              key={post.id}
+                              value={post.id}
+                            >
+                              {title}
+                            </option>
+                          );
+                        }
+                      )}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div className="my-8 h-px bg-white/10" />
+
+              {/* KEYWORD */}
+
+              <div>
+                <h2 className="text-lg font-semibold">
+                  2. Trigger Keyword
+                </h2>
+
+                <p className="mt-2 text-sm text-white/40">
+                  Comments containing this keyword will
+                  trigger the DM.
+                </p>
+
+                <label
+                  htmlFor="trigger_keyword"
+                  className="mt-5 mb-2 block text-sm font-medium"
+                >
+                  Keyword
+                </label>
+
+                <input
+                  id="trigger_keyword"
+                  name="trigger_keyword"
+                  type="text"
+                  required
+                  maxLength={100}
+                  placeholder="LINK"
+                  className="w-full rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm outline-none placeholder:text-white/20 focus:border-blue-500"
+                />
+
+                <p className="mt-2 text-xs text-white/30">
+                  Example: LINK, COURSE, INFO, PRICE
+                </p>
+              </div>
+
+              <div className="my-8 h-px bg-white/10" />
+
+              {/* DM */}
+
+              <div>
+                <h2 className="text-lg font-semibold">
+                  3. DM Message
+                </h2>
+
+                <p className="mt-2 text-sm text-white/40">
+                  This message will be sent when the
+                  keyword matches.
+                </p>
+
+                <label
+                  htmlFor="dm_message"
+                  className="mt-5 mb-2 block text-sm font-medium"
+                >
+                  Message
+                </label>
+
+                <textarea
+                  id="dm_message"
+                  name="dm_message"
+                  required
+                  rows={7}
+                  maxLength={2000}
+                  placeholder={`Hey! 👋
+
+Thanks for commenting!
+
+Here's the link:
+https://example.com`}
+                  className="w-full resize-y rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm leading-6 outline-none placeholder:text-white/20 focus:border-blue-500"
+                />
+              </div>
+
+              <div className="my-8 h-px bg-white/10" />
+
+              {/* STATUS */}
+
+              <div>
+                <h2 className="text-lg font-semibold">
+                  4. Status
+                </h2>
+
+                <label className="mt-5 flex cursor-pointer items-center justify-between rounded-2xl border border-white/10 bg-black/20 p-5">
+                  <div>
+                    <p className="text-sm font-medium">
+                      Activate automation
+                    </p>
+
+                    <p className="mt-1 text-xs text-white/30">
+                      Start processing matching comments
+                      immediately.
+                    </p>
+                  </div>
+
+                  <input
+                    type="checkbox"
+                    name="is_active"
+                    defaultChecked
+                    className="h-5 w-5 accent-blue-600"
+                  />
+                </label>
+              </div>
+
+              {/* ACTIONS */}
+
+              <div className="mt-10 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <Link
+                  href="/admin/automations"
+                  className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-6 py-3 text-sm font-medium text-white/60 hover:bg-white/[0.08] hover:text-white"
+                >
+                  Cancel
+                </Link>
+
+                <button
+                  type="submit"
+                  disabled={posts.length === 0}
+                  className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Create Automation
+                </button>
+              </div>
+            </form>
+          </>
+        )}
+      </div>
+    </main>
+  );
+}
