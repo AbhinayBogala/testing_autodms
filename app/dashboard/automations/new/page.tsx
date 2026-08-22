@@ -1,3 +1,5 @@
+import PostSelector from "./PostSelector";
+
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -81,6 +83,21 @@ export default async function NewAutomationPage({
       formData.get("dm_message") ?? ""
     ).trim();
 
+
+    
+    const buttonName = String(
+      formData.get("button_name") ?? ""
+    ).trim();
+
+    const buttonUrl = String(
+      formData.get("button_url") ?? ""
+    ).trim();
+
+    console.log("DM BUTTON DATA:", {
+      buttonName,
+      buttonUrl,
+    });
+
     const isActive =
       formData.get("is_active") === "on";
 
@@ -97,7 +114,7 @@ export default async function NewAutomationPage({
 
     if (!instagramPostId) {
       redirect(
-        "/admin/automations/new?error=Please+select+an+Instagram+post."
+        "/dashboard/automations/new?error=Please+select+an+Instagram+post."
       );
     }
 
@@ -106,7 +123,7 @@ export default async function NewAutomationPage({
       triggerType !== "any_comment"
     ) {
       redirect(
-        "/admin/automations/new?error=Invalid+trigger+type."
+        "/dashboard/automations/new?error=Invalid+trigger+type."
       );
     }
 
@@ -115,13 +132,13 @@ export default async function NewAutomationPage({
       triggerKeywords.length === 0
     ) {
       redirect(
-        "/admin/automations/new?error=Please+enter+at+least+one+keyword."
+        "/dashboard/automations/new?error=Please+enter+at+least+one+keyword."
       );
     }
 
     if (!dmMessage) {
       redirect(
-        "/admin/automations/new?error=Please+enter+a+DM+message."
+        "/dashboard/automations/new?error=Please+enter+a+DM+message."
       );
     }
 
@@ -143,7 +160,7 @@ export default async function NewAutomationPage({
 
     if (accountError) {
       redirect(
-        `/admin/automations/new?error=${encodeURIComponent(
+        `/dashboard/automations/new?error=${encodeURIComponent(
           accountError.message
         )}`
       );
@@ -151,7 +168,7 @@ export default async function NewAutomationPage({
 
     if (!account) {
       redirect(
-        "/admin/automations/new?error=No+connected+Instagram+account+was+found."
+        "/dashboard/automations/new?error=No+connected+Instagram+account+was+found."
       );
     }
 
@@ -169,7 +186,7 @@ export default async function NewAutomationPage({
 
     if (postError) {
       redirect(
-        `/admin/automations/new?error=${encodeURIComponent(
+        `/dashboard/automations/new?error=${encodeURIComponent(
           postError.message
         )}`
       );
@@ -177,7 +194,7 @@ export default async function NewAutomationPage({
 
     if (!post) {
       redirect(
-        "/admin/automations/new?error=Selected+Instagram+post+was+not+found."
+        "/dashboard/automations/new?error=Selected+Instagram+post+was+not+found."
       );
     }
 
@@ -197,12 +214,12 @@ export default async function NewAutomationPage({
       .eq("instagram_account_id", account.id)
       .eq(
         "instagram_post_id",
-        post.instagram_media_id
+        post.id
       );
 
     if (duplicateError) {
       redirect(
-        `/admin/automations/new?error=${encodeURIComponent(
+        `/dashboard/automations/new?error=${encodeURIComponent(
           duplicateError.message
         )}`
       );
@@ -274,7 +291,7 @@ export default async function NewAutomationPage({
 
     if (duplicate) {
       redirect(
-        "/admin/automations/new?error=An+automation+with+the+same+trigger+already+exists+for+this+post."
+        "/dashboard/automations/new?error=An+automation+with+the+same+trigger+already+exists+for+this+post."
       );
     }
 
@@ -296,7 +313,7 @@ export default async function NewAutomationPage({
           instagram_account_id:
             account.id,
           instagram_post_id:
-            post.instagram_media_id,
+            post.id,
           trigger_type:
             triggerType,
           trigger_keywords:
@@ -304,18 +321,20 @@ export default async function NewAutomationPage({
           trigger_keyword:
             legacyKeyword,
           dm_message: dmMessage,
+          button_name: buttonName.trim() || null,
+          button_url: buttonUrl.trim() || null,
           is_active: isActive,
         });
 
     if (insertError) {
       redirect(
-        `/admin/automations/new?error=${encodeURIComponent(
+        `/dashboard/automations/new?error=${encodeURIComponent(
           insertError.message
         )}`
       );
     }
 
-    redirect("/admin/automations");
+    redirect("/dashboard/automations");
   }
 
   const {
@@ -380,7 +399,7 @@ export default async function NewAutomationPage({
       <header className="border-b border-white/10">
         <div className="mx-auto max-w-5xl px-6 py-6">
           <Link
-            href="/admin/automations"
+            href="/dashboard/automations"
             className="text-sm text-white/40 transition hover:text-white"
           >
             ← Back to Automations
@@ -504,56 +523,9 @@ export default async function NewAutomationPage({
                       Post
                     </label>
 
-                    <select
-                      id="instagram_post_id"
-                      name="instagram_post_id"
-                      required
-                      defaultValue=""
-                      className="w-full rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
-                    >
-                      <option
-                        value=""
-                        disabled
-                      >
-                        Select a post
-                      </option>
-
-                      {posts.map(
-                        (post) => {
-                          const caption =
-                            post.caption
-                              ?.replace(
-                                /\s+/g,
-                                " "
-                              )
-                              .trim();
-
-                          const title =
-                            caption
-                              ? caption.length >
-                                80
-                                ? `${caption.slice(
-                                    0,
-                                    80
-                                  )}...`
-                                : caption
-                              : `Instagram ${
-                                  post.media_type ||
-                                  "Post"
-                                }`;
-
-                          return (
-                            <option
-                              key={post.id}
-                              value={post.id}
-                            >
-                              {title}
-                            </option>
-                          );
-                        }
-                      )}
-                    </select>
-                  </div>
+                    <PostSelector
+                      posts={posts}
+                    />                  </div>
                 )}
               </div>
 
@@ -664,6 +636,41 @@ Here's the link:
 https://example.com`}
                   className="w-full resize-y rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm leading-6 outline-none placeholder:text-white/20 focus:border-blue-500"
                 />
+
+
+                <div className="mt-6 space-y-4">
+                  <div>
+                    <label
+                      htmlFor="button_name"
+                      className="mb-2 block text-sm font-medium"
+                    >
+                      Custom Button Name
+                    </label>
+
+                    <input
+                      id="button_name"
+                      name="button_name"
+                      placeholder="Get Course"
+                      className="w-full rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm outline-none placeholder:text-white/20 focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="button_url"
+                      className="mb-2 block text-sm font-medium"
+                    >
+                      Button URL
+                    </label>
+
+                    <input
+                      id="button_url"
+                      name="button_url"
+                      placeholder="https://example.com"
+                      className="w-full rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm outline-none placeholder:text-white/20 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="my-8 h-px bg-white/10" />
@@ -695,7 +702,7 @@ https://example.com`}
 
               <div className="mt-10 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <Link
-                  href="/admin/automations"
+                  href="/dashboard/automations"
                   className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-6 py-3 text-sm font-medium text-white/60 hover:bg-white/[0.08] hover:text-white"
                 >
                   Cancel

@@ -33,6 +33,8 @@ type Automation = {
   trigger_keyword: string | null;
 
   dm_message: string;
+  button_name: string | null;
+  button_url: string | null;
   is_active: boolean;
 };
 
@@ -515,6 +517,8 @@ async function processComment(
         trigger_keywords,
         trigger_keyword,
         dm_message,
+        button_name,
+        button_url,
         is_active
         `
       )
@@ -884,6 +888,12 @@ async function processComment(
 
         message:
           dmMessage,
+
+        buttonName:
+          selectedAutomation.button_name,
+
+        buttonUrl:
+          selectedAutomation.button_url,
       });
 
     console.log(
@@ -1017,11 +1027,15 @@ async function sendPrivateReply({
   accessToken,
   commentId,
   message,
+  buttonName,
+  buttonUrl,
 }: {
   instagramUserId: string;
   accessToken: string;
   commentId: string;
   message: string;
+  buttonName?: string | null;
+  buttonUrl?: string | null;
 }) {
   try {
     const url =
@@ -1054,9 +1068,27 @@ async function sendPrivateReply({
                 commentId,
             },
 
-            message: {
-              text: message,
-            },
+            message:
+              buttonName && buttonUrl
+                ? {
+                    attachment: {
+                      type: "template",
+                      payload: {
+                        template_type: "button",
+                        text: message,
+                        buttons: [
+                          {
+                            type: "web_url",
+                            url: buttonUrl,
+                            title: buttonName,
+                          },
+                        ],
+                      },
+                    },
+                  }
+                : {
+                    text: message,
+                  },
           }),
 
           cache: "no-store",
