@@ -25,7 +25,13 @@ type Automation = {
   user_id: string;
   instagram_account_id: string;
   instagram_post_id: string;
-  trigger_keyword: string;
+
+  trigger_type: string | null;
+  trigger_keywords: string[] | null;
+
+  // Kept for backward compatibility.
+  trigger_keyword: string | null;
+
   dm_message: string;
   is_active: boolean;
 };
@@ -273,8 +279,8 @@ async function getInstagramAccount(
   }
 
   /*
-    Refresh the token if necessary.
-  */
+   * Refresh token if necessary.
+   */
 
   try {
     const refreshed =
@@ -294,10 +300,10 @@ async function getInstagramAccount(
     );
 
     /*
-      Continue with the existing
-      token. If Instagram rejects it,
-      we will see the real API error.
-    */
+     * Continue using the existing token.
+     * If Instagram rejects it, the actual API
+     * error will be logged later.
+     */
 
     return data;
   }
@@ -401,7 +407,7 @@ async function processComment(
       createAdminClient();
 
     /* =====================================================
-       1. FIND AUTOMATION BY POST
+       1. FIND ACTIVE AUTOMATIONS BY POST
     ===================================================== */
 
     const {
@@ -418,6 +424,8 @@ async function processComment(
         user_id,
         instagram_account_id,
         instagram_post_id,
+        trigger_type,
+        trigger_keywords,
         trigger_keyword,
         dm_message,
         is_active
@@ -459,20 +467,28 @@ async function processComment(
     }
 
     /* =====================================================
-       2. FIND AUTOMATION + ACCOUNT
+       2. FIND MATCHING AUTOMATION + ACCOUNT
     ===================================================== */
 
-    let selectedAutomation:
+    const normalizedComment =
+      commentText
+        .toLowerCase()
+        .trim();
+
+    let matchedAutomation:
       | Automation
       | null = null;
 
-    let account:
+    let matchedAccount:
       | InstagramAccount
       | null = null;
 
     for (
-      const automation of automations
+      const rawAutomation of automations
     ) {
+      const automation =
+        rawAutomation as Automation;
+
       if (
         !automation
           .instagram_account_id
@@ -480,24 +496,24 @@ async function processComment(
         continue;
       }
 
-      const candidate =
+      const account =
         await getInstagramAccount(
           automation
             .instagram_account_id
         );
 
-      if (!candidate) {
+      if (!account) {
         continue;
       }
 
       /*
-        Security check:
-        automation and Instagram account
-        must belong to the same user.
-      */
+       * Security check:
+       * automation and account must belong
+       * to the same user.
+       */
 
       if (
-        candidate.user_id !==
+        account.user_id !==
         automation.user_id
       ) {
         console.warn(
@@ -507,122 +523,200 @@ async function processComment(
               automation.user_id,
 
             accountUserId:
-              candidate.user_id,
+              account.user_id,
 
             automationId:
               automation.id,
 
             accountId:
-              candidate.id,
+              account.id,
           }
         );
 
         continue;
       }
 
-      selectedAutomation =
+      /*
+       * ===================================================
+       * TRIGGER MATCHING
+       * ===================================================
+       */
+
+      const triggerType =
+        (
+          automation.trigger_type ||
+          "keywords"
+        )
+          .toLowerCase()
+          .trim();
+
+      /*
+       * ANY COMMENT
+       */
+
+      if (
+        triggerType ===
+        "any_comment"
+      ) {
+        console.log(
+          "ANY COMMENT TRIGGER MATCHED:",
+          {
+            automationId:
+              automation.id,
+            comment:
+              normalizedComment,
+          }
+        );
+
+        matchedAutomation =
+          automation;
+
+        matchedAccount =
+          account;
+
+        break;
+      }
+
+      /*
+       * KEYWORDS
+       */
+
+      let keywords: string[] =
+        [];
+
+      if (
+        Array.isArray(
+          automation.trigger_keywords
+        )
+      ) {
+        keywords =
+          automation.trigger_keywords
+            .map(
+              (keyword) =>
+                String(
+                  keyword
+                )
+                  .trim()
+                  .toLowerCase()
+            )
+            .filter(Boolean);
+      }
+
+      /*
+       * Backward compatibility:
+       * If the new array is empty, use
+       * the old trigger_keyword column.
+       */
+
+      if (
+        keywords.length === 0 &&
+        automation.trigger_keyword
+      ) {
+        keywords = [
+          String(
+            automation.trigger_keyword
+          )
+            .trim()
+            .toLowerCase(),
+        ].filter(Boolean);
+      }
+
+      console.log(
+        "KEYWORD CHECK:",
+        {
+          comment:
+            normalizedComment,
+
+          triggerType,
+
+          keywords,
+        }
+      );
+
+      if (
+        keywords.length === 0
+      ) {
+        console.warn(
+          "AUTOMATION HAS NO KEYWORDS:",
+          automation.id
+        );
+
+        continue;
+      }
+
+      /*
+       * Match ANY configured keyword.
+       */
+
+      const matchedKeyword =
+        keywords.find(
+          (keyword) =>
+            normalizedComment.includes(
+              keyword
+            )
+        );
+
+      if (
+        !matchedKeyword
+      ) {
+        console.log(
+          "NO KEYWORD MATCH:",
+          {
+            automationId:
+              automation.id,
+
+            keywords,
+          }
+        );
+
+        continue;
+      }
+
+      console.log(
+        "KEYWORD MATCHED:",
+        {
+          automationId:
+            automation.id,
+
+          keyword:
+            matchedKeyword,
+        }
+      );
+
+      matchedAutomation =
         automation;
 
-      account =
-        candidate;
+      matchedAccount =
+        account;
 
       break;
     }
 
+    /*
+     * No matching automation.
+     */
+
     if (
-      !selectedAutomation ||
-      !account
+      !matchedAutomation ||
+      !matchedAccount
     ) {
-      console.warn(
-        "NO INSTAGRAM ACCOUNT FOUND FOR AUTOMATION:",
+      console.log(
+        "NO AUTOMATION MATCHED COMMENT:",
         {
           mediaId,
-
-          webhookInstagramUserId,
-
-          automationCount:
-            automations.length,
+          comment:
+            normalizedComment,
         }
       );
 
       return;
     }
 
-    console.log(
-      "========================================"
-    );
+    const selectedAutomation =
+      matchedAutomation;
 
-    console.log(
-      "INSTAGRAM ACCOUNT FOUND"
-    );
-
-    console.log({
-      accountId:
-        account.id,
-
-      databaseInstagramUserId:
-        account.instagram_user_id,
-
-      webhookInstagramUserId,
-
-      username:
-        account.username,
-
-      automationId:
-        selectedAutomation.id,
-    });
-
-    console.log(
-      "========================================"
-    );
-
-    /* =====================================================
-       3. KEYWORD MATCH
-    ===================================================== */
-
-    const normalizedComment =
-      commentText
-        .toLowerCase()
-        .trim();
-
-    const keyword =
-      String(
-        selectedAutomation
-          .trigger_keyword ||
-          ""
-      )
-        .toLowerCase()
-        .trim();
-
-    console.log(
-      "KEYWORD CHECK:",
-      {
-        comment:
-          normalizedComment,
-
-        keyword,
-      }
-    );
-
-    if (!keyword) {
-      console.warn(
-        "AUTOMATION KEYWORD IS EMPTY"
-      );
-
-      return;
-    }
-
-    if (
-      !normalizedComment.includes(
-        keyword
-      )
-    ) {
-      console.log(
-        "KEYWORD NOT MATCHED"
-      );
-
-      return;
-    }
+    const account =
+      matchedAccount;
 
     console.log(
       "========================================"
@@ -640,7 +734,15 @@ async function processComment(
         selectedAutomation
           .instagram_post_id,
 
-      keyword:
+      triggerType:
+        selectedAutomation
+          .trigger_type,
+
+      triggerKeywords:
+        selectedAutomation
+          .trigger_keywords,
+
+      legacyKeyword:
         selectedAutomation
           .trigger_keyword,
 
@@ -653,7 +755,7 @@ async function processComment(
     );
 
     /* =====================================================
-       4. SEND PRIVATE REPLY
+       3. SEND PRIVATE REPLY
     ===================================================== */
 
     if (!account.access_token) {
@@ -726,8 +828,9 @@ async function processComment(
     );
 
     console.log(
-      "KEYWORD:",
-      keyword
+      "TRIGGER TYPE:",
+      selectedAutomation
+        .trigger_type
     );
 
     console.log(
@@ -867,11 +970,6 @@ async function processMessage(
   event: any
 ) {
   try {
-    /*
-      Message handling is kept separate from
-      comment-to-DM automation.
-    */
-
     console.log(
       "INSTAGRAM MESSAGE EVENT:",
       {
