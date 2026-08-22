@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import type { InstagramComment } from "@/types/instagram";
 
 type Post = {
@@ -76,6 +77,50 @@ export default function PostsGrid({
       document.body.style.overflow = "";
     };
   }, [selectedPost]);
+
+  useEffect(() => {
+    const supabase = createClient();
+
+    const channel = supabase
+      .channel("instagram-comments-live")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "instagram_comments",
+        },
+        (payload) => {
+          const newComment =
+            payload.new as InstagramComment;
+
+          setComments((current) => {
+            const exists = current.some(
+              (comment) =>
+                comment.id === newComment.id
+            );
+
+            if (exists) {
+              return current;
+            }
+
+            return [
+              ...current,
+              {
+                ...newComment,
+                replies: [],
+              },
+            ];
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
 
   function closePopup() {
     setSelectedPost(null);
