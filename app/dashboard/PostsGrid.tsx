@@ -86,32 +86,64 @@ export default function PostsGrid({
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
           table: "instagram_comments",
         },
         (payload) => {
-          const newComment =
-            payload.new as InstagramComment;
+          if (payload.eventType === "INSERT") {
+            const newComment =
+              payload.new as InstagramComment;
 
-          setComments((current) => {
-            const exists = current.some(
-              (comment) =>
-                comment.id === newComment.id
+            setComments((current) => {
+              const exists = current.some(
+                (comment) =>
+                  comment.id === newComment.id
+              );
+
+              if (exists) {
+                return current;
+              }
+
+              return [
+                ...current,
+                {
+                  ...newComment,
+                  replies: [],
+                },
+              ];
+            });
+          }
+
+          if (payload.eventType === "UPDATE") {
+            const updatedComment =
+              payload.new as InstagramComment;
+
+            setComments((current) =>
+              current.map((comment) =>
+                comment.id === updatedComment.id
+                  ? {
+                      ...comment,
+                      ...updatedComment,
+                    }
+                  : comment
+              )
             );
+          }
 
-            if (exists) {
-              return current;
-            }
+          if (payload.eventType === "DELETE") {
+            const deletedComment =
+              payload.old as {
+                id: string;
+              };
 
-            return [
-              ...current,
-              {
-                ...newComment,
-                replies: [],
-              },
-            ];
-          });
+            setComments((current) =>
+              current.filter(
+                (comment) =>
+                  comment.id !== deletedComment.id
+              )
+            );
+          }
         }
       )
       .subscribe();

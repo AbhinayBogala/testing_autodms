@@ -182,9 +182,23 @@ export async function POST(
           change?.field ===
           "comments"
         ) {
+          const value = change.value;
+
+          // Handle deleted Instagram comments
+          if (
+            value?.verb === "remove" ||
+            value?.action === "delete" ||
+            value?.deleted === true
+          ) {
+            await deleteInstagramComment(
+              value
+            );
+            continue;
+          }
+
           await processComment(
             webhookInstagramUserId,
-            change.value
+            value
           );
         }
       }
@@ -306,6 +320,61 @@ async function getInstagramAccount(
      */
 
     return data;
+  }
+}
+
+
+
+/* =========================================================
+   DELETE INSTAGRAM COMMENT
+========================================================= */
+
+async function deleteInstagramComment(
+  value: any
+) {
+  try {
+    const commentId =
+      value?.id
+        ? String(value.id)
+        : "";
+
+    if (!commentId) {
+      console.warn(
+        "DELETE COMMENT ID MISSING"
+      );
+      return;
+    }
+
+    const supabase =
+      createAdminClient();
+
+    const { error } =
+      await supabase
+        .from("instagram_comments")
+        .delete()
+        .eq(
+          "instagram_comment_id",
+          commentId
+        );
+
+    if (error) {
+      console.error(
+        "DELETE INSTAGRAM COMMENT ERROR:",
+        error
+      );
+      return;
+    }
+
+    console.log(
+      "INSTAGRAM COMMENT DELETED:",
+      commentId
+    );
+
+  } catch (error) {
+    console.error(
+      "DELETE COMMENT PROCESSING ERROR:",
+      error
+    );
   }
 }
 
