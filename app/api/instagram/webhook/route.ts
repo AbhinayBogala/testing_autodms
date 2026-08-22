@@ -804,15 +804,28 @@ async function processComment(
       result
     );
 
+    let dmSent = false;
+
     if (!result.success) {
       console.error(
         "PRIVATE INSTAGRAM DM FAILED:",
         result.data ||
           result.error
       );
-
-      return;
+    } else {
+      dmSent = true;
     }
+
+    await saveInstagramComment({
+      accountId: account.id,
+      commentId,
+      mediaId,
+      commenterId,
+      commenterUsername,
+      commentText,
+      automationId: selectedAutomation.id,
+      dmSent,
+    });
 
     console.log(
       "========================================"
@@ -845,6 +858,65 @@ async function processComment(
     console.error(
       "COMMENT PROCESSING ERROR:",
       error
+    );
+  }
+}
+
+async function saveInstagramComment({
+  accountId,
+  commentId,
+  mediaId,
+  commenterId,
+  commenterUsername,
+  commentText,
+  automationId,
+  dmSent,
+}: {
+  accountId: string;
+  commentId: string;
+  mediaId: string;
+  commenterId: string | null;
+  commenterUsername: string | null;
+  commentText: string;
+  automationId: string | null;
+  dmSent: boolean;
+}) {
+  const supabase = createAdminClient();
+
+  const { data: post } = await supabase
+    .from("instagram_posts")
+    .select("id")
+    .eq("instagram_media_id", mediaId)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from("instagram_comments")
+    .upsert(
+      {
+        instagram_account_id: accountId,
+        instagram_post_id: post?.id ?? null,
+        instagram_comment_id: commentId,
+        commenter_instagram_id: commenterId,
+        commenter_username: commenterUsername,
+        comment_text: commentText,
+        automation_id: automationId,
+        dm_sent: dmSent,
+        public_reply_sent: false,
+      },
+      {
+        onConflict:
+          "instagram_account_id,instagram_comment_id",
+      }
+    );
+
+  if (error) {
+    console.error(
+      "SAVE INSTAGRAM COMMENT ERROR:",
+      error
+    );
+  } else {
+    console.log(
+      "COMMENT SAVED FOR REALTIME"
     );
   }
 }
