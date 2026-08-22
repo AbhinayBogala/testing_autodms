@@ -500,9 +500,43 @@ async function processComment(
     ===================================================== */
 
     const {
+      data: post,
+      error: postError,
+    } = await supabase
+      .from(
+        "instagram_posts"
+      )
+      .select("id")
+      .eq(
+        "instagram_media_id",
+        mediaId
+      )
+      .maybeSingle();
+
+    console.log(
+      "MATCHED POST:",
+      post
+    );
+
+    if (postError) {
+      console.error(
+        "POST LOOKUP ERROR:",
+        postError
+      );
+      return;
+    }
+
+    if (!post) {
+      console.log(
+        "NO POST FOUND FOR MEDIA:",
+        mediaId
+      );
+      return;
+    }
+
+    const {
       data: automations,
-      error:
-        automationError,
+      error: automationError,
     } = await supabase
       .from(
         "instagram_automations"
@@ -524,7 +558,7 @@ async function processComment(
       )
       .eq(
         "instagram_post_id",
-        mediaId
+        post.id
       )
       .eq(
         "is_active",
