@@ -1,23 +1,28 @@
 import Link from "next/link";
+
 import { createClient } from "@/lib/supabase/server";
+
 import AutomationCard from "./AutomationCard";
 
 export const dynamic = "force-dynamic";
 
 type Automation = {
   id: string;
+  user_id: string;
+  instagram_account_id: string;
   instagram_post_id: string;
   trigger_keyword: string;
   dm_message: string;
   is_active: boolean;
   created_at: string;
+  updated_at: string;
 };
 
 export default async function AutomationsPage() {
   const supabase = await createClient();
 
   // =========================================================
-  // AUTH
+  // AUTHENTICATION
   // =========================================================
 
   const {
@@ -26,11 +31,10 @@ export default async function AutomationsPage() {
   } = await supabase.auth.getUser();
 
   if (authError) {
-    console.error("AUTH ERROR");
-    console.error("message:", authError.message);
-    console.error("code:", authError.code);
-    console.error("details:", authError.details);
-    console.error("hint:", authError.hint);
+    console.error(
+      "AUTH ERROR:",
+      authError.message
+    );
 
     return (
       <main className="min-h-screen bg-[#05070d] p-10 text-white">
@@ -39,25 +43,9 @@ export default async function AutomationsPage() {
             Authentication Error
           </h1>
 
-          <div className="mt-6 rounded-2xl border border-red-500/20 bg-red-500/10 p-6">
-            <p className="text-sm text-red-300">
-              {authError.message || "Unknown authentication error"}
-            </p>
-
-            <div className="mt-4 space-y-2 font-mono text-xs text-white/50">
-              <p>
-                Code: {authError.code || "none"}
-              </p>
-
-              <p>
-                Details: {authError.details || "none"}
-              </p>
-
-              <p>
-                Hint: {authError.hint || "none"}
-              </p>
-            </div>
-          </div>
+          <pre className="mt-5 overflow-x-auto rounded-xl bg-red-500/10 p-5 text-sm text-red-300">
+            {authError.message}
+          </pre>
         </div>
       </main>
     );
@@ -74,10 +62,6 @@ export default async function AutomationsPage() {
           <h1 className="text-xl font-semibold">
             Authentication required
           </h1>
-
-          <p className="mt-2 text-sm text-white/40">
-            You need to be logged in to view automations.
-          </p>
 
           <Link
             href="/admin/login"
@@ -100,7 +84,17 @@ export default async function AutomationsPage() {
   } = await supabase
     .from("instagram_automations")
     .select(
-      "id, instagram_post_id, trigger_keyword, dm_message, is_active, created_at"
+      `
+      id,
+      user_id,
+      instagram_account_id,
+      instagram_post_id,
+      trigger_keyword,
+      dm_message,
+      is_active,
+      created_at,
+      updated_at
+      `
     )
     .eq("user_id", user.id)
     .order("created_at", {
@@ -112,17 +106,16 @@ export default async function AutomationsPage() {
   // =========================================================
 
   if (automationError) {
-    console.error("========================================");
-    console.error("AUTOMATION DATABASE ERROR");
-    console.error("========================================");
+    console.error(
+      "========================================"
+    );
 
     console.error(
-      "Full error:",
-      JSON.stringify(
-        automationError,
-        Object.getOwnPropertyNames(automationError),
-        2
-      )
+      "AUTOMATION DATABASE ERROR"
+    );
+
+    console.error(
+      "========================================"
     );
 
     console.error(
@@ -135,152 +128,50 @@ export default async function AutomationsPage() {
       automationError.code
     );
 
-    console.error(
-      "Details:",
-      automationError.details
-    );
-
-    console.error(
-      "Hint:",
-      automationError.hint
-    );
-
-    console.error(
-      "User ID:",
-      user.id
-    );
-
-    console.error("========================================");
-
     return (
       <main className="min-h-screen bg-[#05070d] text-white">
         <header className="border-b border-white/10">
           <div className="mx-auto max-w-6xl px-6 py-6">
             <Link
-              href="/admin/dashboard"
+              href="/dashboard"
               className="text-sm text-white/40 transition hover:text-white"
             >
               ← Dashboard
             </Link>
 
-            <h1 className="mt-3 text-2xl font-bold">
+            <h1 className="mt-2 text-2xl font-bold">
               Automations
             </h1>
+
+            <p className="mt-1 text-sm text-white/40">
+              Manage your Instagram comment-to-DM automations.
+            </p>
           </div>
         </header>
 
-        <div className="mx-auto max-w-5xl px-6 py-10">
-          <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-7">
-            <div className="flex items-start gap-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/20 text-red-300">
-                !
-              </div>
+        <div className="mx-auto max-w-6xl px-6 py-10">
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-6">
+            <h2 className="text-lg font-semibold text-red-300">
+              Failed to load automations
+            </h2>
 
-              <div className="min-w-0">
-                <h2 className="text-lg font-semibold text-red-300">
-                  Failed to load automations
-                </h2>
+            <p className="mt-4 text-sm text-white/50">
+              Supabase returned the following error:
+            </p>
 
-                <p className="mt-2 text-sm text-white/50">
-                  Supabase returned an error while querying the
-                  <span className="mx-1 font-mono text-white/80">
-                    instagram_automations
-                  </span>
-                  table.
-                </p>
-              </div>
-            </div>
+            <pre className="mt-4 overflow-x-auto rounded-xl bg-black/40 p-5 text-sm text-red-300">
+              {automationError.message}
+            </pre>
 
-            {/* Error message */}
-            <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-white/30">
-                Message
-              </p>
-
-              <p className="mt-2 break-words font-mono text-sm text-red-300">
-                {automationError.message ||
-                  "No error message returned"}
+            <div className="mt-4 text-xs text-white/40">
+              <p>
+                Code:{" "}
+                <span className="text-white/70">
+                  {automationError.code ||
+                    "unknown"}
+                </span>
               </p>
             </div>
-
-            {/* Error code */}
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-                <p className="text-xs font-semibold uppercase tracking-wider text-white/30">
-                  Error Code
-                </p>
-
-                <p className="mt-2 font-mono text-sm text-yellow-300">
-                  {automationError.code || "None"}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-                <p className="text-xs font-semibold uppercase tracking-wider text-white/30">
-                  User ID
-                </p>
-
-                <p className="mt-2 break-all font-mono text-xs text-white/60">
-                  {user.id}
-                </p>
-              </div>
-            </div>
-
-            {/* Details */}
-            <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-white/30">
-                Details
-              </p>
-
-              <p className="mt-2 break-words font-mono text-sm text-white/70">
-                {automationError.details || "None"}
-              </p>
-            </div>
-
-            {/* Hint */}
-            <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-white/30">
-                Hint
-              </p>
-
-              <p className="mt-2 break-words font-mono text-sm text-white/70">
-                {automationError.hint || "None"}
-              </p>
-            </div>
-
-            {/* Query information */}
-            <div className="mt-6 rounded-2xl border border-blue-500/10 bg-blue-500/5 p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-blue-300/60">
-                Query being executed
-              </p>
-
-              <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-blue-200/70">
-{`FROM: instagram_automations
-
-SELECT:
-  id
-  instagram_post_id
-  trigger_keyword
-  dm_message
-  is_active
-  created_at
-
-FILTER:
-  user_id = ${user.id}
-
-ORDER:
-  created_at DESC`}
-              </pre>
-            </div>
-          </div>
-
-          <div className="mt-6">
-            <Link
-              href="/admin/dashboard"
-              className="inline-flex rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm text-white/60 transition hover:bg-white/[0.08] hover:text-white"
-            >
-              ← Back to Dashboard
-            </Link>
           </div>
         </div>
       </main>
@@ -288,7 +179,7 @@ ORDER:
   }
 
   // =========================================================
-  // CONVERT DATA
+  // AUTOMATION LIST
   // =========================================================
 
   const automationList =
@@ -300,12 +191,13 @@ ORDER:
 
   return (
     <main className="min-h-screen bg-[#05070d] text-white">
-      {/* Header */}
+      {/* HEADER */}
+
       <header className="border-b border-white/10">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
           <div>
             <Link
-              href="/admin/dashboard"
+              href="/dashboard"
               className="text-sm text-white/40 transition hover:text-white"
             >
               ← Dashboard
@@ -329,9 +221,11 @@ ORDER:
         </div>
       </header>
 
-      {/* Content */}
+      {/* CONTENT */}
+
       <div className="mx-auto max-w-6xl px-6 py-10">
-        {/* Stats */}
+        {/* STATS */}
+
         <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
             <p className="text-xs uppercase tracking-wider text-white/30">
@@ -351,7 +245,8 @@ ORDER:
             <p className="mt-2 text-3xl font-bold text-green-400">
               {
                 automationList.filter(
-                  (automation) => automation.is_active
+                  (automation) =>
+                    automation.is_active
                 ).length
               }
             </p>
@@ -365,14 +260,16 @@ ORDER:
             <p className="mt-2 text-3xl font-bold text-yellow-400">
               {
                 automationList.filter(
-                  (automation) => !automation.is_active
+                  (automation) =>
+                    !automation.is_active
                 ).length
               }
             </p>
           </div>
         </div>
 
-        {/* Empty state */}
+        {/* EMPTY STATE */}
+
         {automationList.length === 0 ? (
           <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-12 text-center">
             <div className="text-5xl">
@@ -384,8 +281,8 @@ ORDER:
             </h2>
 
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-white/40">
-              Create your first Instagram comment-to-DM
-              automation.
+              Create your first Instagram
+              comment-to-DM automation.
             </p>
 
             <Link
@@ -397,12 +294,14 @@ ORDER:
           </div>
         ) : (
           <div className="space-y-5">
-            {automationList.map((automation) => (
-              <AutomationCard
-                key={automation.id}
-                automation={automation}
-              />
-            ))}
+            {automationList.map(
+              (automation) => (
+                <AutomationCard
+                  key={automation.id}
+                  automation={automation}
+                />
+              )
+            )}
           </div>
         )}
       </div>
