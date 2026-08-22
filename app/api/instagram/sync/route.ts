@@ -354,43 +354,6 @@ export async function POST() {
       );
     }
 
-
-    // =========================================================
-    // REMOVE POSTS DELETED ON INSTAGRAM
-    // =========================================================
-
-    const syncedMediaIds = mediaData.data.map(
-      (media: any) => String(media.id)
-    );
-
-    const { data: oldPosts } = await admin
-      .from("instagram_posts")
-      .select("id, instagram_media_id")
-      .eq("instagram_account_id", account.id);
-
-    if (oldPosts) {
-      const deletedPosts = oldPosts
-        .filter(
-          (post) =>
-            !syncedMediaIds.includes(
-              post.instagram_media_id
-            )
-        )
-        .map((post) => post.id);
-
-      if (deletedPosts.length > 0) {
-        await admin
-          .from("instagram_posts")
-          .delete()
-          .in("id", deletedPosts);
-
-        console.log(
-          "REMOVED DELETED INSTAGRAM POSTS:",
-          deletedPosts
-        );
-      }
-    }
-
     // =========================================================
     // SUCCESS
     // =========================================================
@@ -464,8 +427,6 @@ async function syncCommentPage({
 
   let replies = 0;
 
-  const syncedCommentIds: string[] = [];
-
   const errors: string[] = [];
 
   let nextUrl: string | null =
@@ -534,8 +495,6 @@ async function syncCommentPage({
     }
 
     for (const comment of data.data) {
-      syncedCommentIds.push(String(comment.id));
-
       const saved =
         await saveComment(
           admin,
@@ -610,11 +569,65 @@ async function syncCommentPage({
       null;
   } while (nextUrl);
 
+
+  // =======================================================
+  // REMOVE COMMENTS DELETED ON INSTAGRAM
+  // =======================================================
+
+  const { data: existingComments } = await admin
+    .from("instagram_comments")
+    .select("id, instagram_comment_id")
+    .eq(
+      "instagram_post_id",
+      postId
+    );
+
+
+  if (existingComments) {
+
+    const deletedCommentIds =
+      existingComments
+        .filter(
+          (comment) =>
+            !syncedCommentIds.includes(
+              comment.instagram_comment_id
+            )
+        )
+        .map(
+          (comment) =>
+            comment.id
+        );
+
+
+    if (deletedCommentIds.length > 0) {
+
+      const { error } = await admin
+        .from("instagram_comments")
+        .delete()
+        .in(
+          "id",
+          deletedCommentIds
+        );
+
+
+      if (error) {
+        console.error(
+          "DELETE OLD INSTAGRAM COMMENTS ERROR:",
+          error
+        );
+      } else {
+        console.log(
+          "REMOVED DELETED COMMENTS:",
+          deletedCommentIds
+        );
+      }
+    }
+  }
+
+
   return {
     comments,
-
     replies,
-
     errors,
   };
 }

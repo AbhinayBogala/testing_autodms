@@ -146,6 +146,28 @@ export default function PostsGrid({
           }
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "instagram_posts",
+        },
+        (payload) => {
+          if (payload.eventType === "DELETE") {
+            const deletedPost =
+              payload.old as {
+                id: string;
+              };
+
+            setSelectedPost((current) =>
+              current?.id === deletedPost.id
+                ? null
+                : current
+            );
+          }
+        }
+      )
       .subscribe();
 
     return () => {

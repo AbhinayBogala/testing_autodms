@@ -188,11 +188,17 @@ export async function POST(
           if (
             value?.verb === "remove" ||
             value?.action === "delete" ||
-            value?.deleted === true
+            value?.deleted === true ||
+            value?.verb === "delete"
           ) {
+            console.log(
+              "INSTAGRAM COMMENT DELETE RECEIVED"
+            );
+
             await deleteInstagramComment(
               value
             );
+
             continue;
           }
 
@@ -334,13 +340,25 @@ async function deleteInstagramComment(
 ) {
   try {
     const commentId =
-      value?.id
-        ? String(value.id)
+      value?.id ||
+      value?.comment_id ||
+      value?.comment?.id
+        ? String(
+            value?.id ||
+            value?.comment_id ||
+            value?.comment?.id
+          )
         : "";
+
+    console.log(
+      "INSTAGRAM DELETE EVENT:",
+      JSON.stringify(value, null, 2)
+    );
 
     if (!commentId) {
       console.warn(
-        "DELETE COMMENT ID MISSING"
+        "DELETE COMMENT ID MISSING",
+        value
       );
       return;
     }
