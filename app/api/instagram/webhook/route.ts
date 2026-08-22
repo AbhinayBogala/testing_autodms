@@ -9,17 +9,39 @@ import {
   isInstagramTokenError,
 } from "@/lib/instagram";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+type InstagramAccount = {
+  id: string;
+  user_id: string;
+  instagram_user_id: string;
+  username: string | null;
+  access_token: string | null;
+  token_issued_at: string | null;
+  token_expires_at: string | null;
+  is_connected: boolean;
+};
+
+type Automation = {
+  id: string;
+  user_id: string;
+  instagram_account_id: string;
+  instagram_post_id: string;
+  trigger_keyword: string;
+  dm_message: string;
+  is_active: boolean;
+};
 
 const VERIFY_TOKEN =
   process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN;
 
 /* =========================================================
-   META WEBHOOK VERIFICATION
+   WEBHOOK VERIFICATION
 ========================================================= */
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
+export async function GET(
+  request: NextRequest
+) {
+  const { searchParams } =
+    new URL(request.url);
 
   const mode =
     searchParams.get("hub.mode");
@@ -30,6 +52,27 @@ export async function GET(request: NextRequest) {
   const challenge =
     searchParams.get("hub.challenge");
 
+  console.log(
+    "========================================"
+  );
+
+  console.log(
+    "INSTAGRAM WEBHOOK VERIFICATION"
+  );
+
+  console.log({
+    mode,
+    tokenProvided: Boolean(token),
+    verifyTokenConfigured:
+      Boolean(VERIFY_TOKEN),
+    challengeProvided:
+      Boolean(challenge),
+  });
+
+  console.log(
+    "========================================"
+  );
+
   if (
     mode === "subscribe" &&
     token &&
@@ -37,17 +80,22 @@ export async function GET(request: NextRequest) {
     token === VERIFY_TOKEN &&
     challenge
   ) {
-    return new NextResponse(challenge, {
-      status: 200,
-      headers: {
-        "Content-Type": "text/plain",
-      },
-    });
+    return new NextResponse(
+      challenge,
+      {
+        status: 200,
+        headers: {
+          "Content-Type":
+            "text/plain",
+        },
+      }
+    );
   }
 
   return NextResponse.json(
     {
-      error: "Verification failed",
+      error:
+        "Verification failed",
     },
     {
       status: 403,
@@ -56,14 +104,15 @@ export async function GET(request: NextRequest) {
 }
 
 /* =========================================================
-   META WEBHOOK EVENTS
+   WEBHOOK EVENT
 ========================================================= */
 
 export async function POST(
   request: NextRequest
 ) {
   try {
-    const body = await request.json();
+    const body =
+      await request.json();
 
     console.log(
       "========================================"
@@ -74,80 +123,78 @@ export async function POST(
     );
 
     console.log(
-      JSON.stringify(body, null, 2)
+      JSON.stringify(
+        body,
+        null,
+        2
+      )
     );
 
     console.log(
       "========================================"
     );
 
-    /*
-      Meta sends:
-      {
-        object: "instagram",
-        entry: [...]
-      }
-    */
-
-    if (body?.object !== "instagram") {
+    if (
+      body?.object !==
+      "instagram"
+    ) {
       return NextResponse.json({
         success: true,
         ignored: true,
       });
     }
 
-    const entries = Array.isArray(body.entry)
-      ? body.entry
-      : [];
+    const entries =
+      Array.isArray(body.entry)
+        ? body.entry
+        : [];
 
-    for (const entry of entries) {
-      const instagramUserId =
-        String(entry?.id || "");
+    for (
+      const entry of entries
+    ) {
+      const webhookInstagramUserId =
+        String(
+          entry?.id || ""
+        );
 
       console.log(
         "WEBHOOK INSTAGRAM USER ID:",
-        instagramUserId
+        webhookInstagramUserId
       );
 
-      /*
-        COMMENTS
-      */
+      const changes =
+        Array.isArray(
+          entry?.changes
+        )
+          ? entry.changes
+          : [];
 
-      const changes = Array.isArray(
-        entry?.changes
-      )
-        ? entry.changes
-        : [];
-
-      for (const change of changes) {
+      for (
+        const change of changes
+      ) {
         if (
-          change?.field !== "comments"
+          change?.field ===
+          "comments"
         ) {
-          continue;
+          await processComment(
+            webhookInstagramUserId,
+            change.value
+          );
         }
-
-        await processCommentEvent(
-          instagramUserId,
-          change.value
-        );
       }
 
-      /*
-        MESSAGES
+      const messaging =
+        Array.isArray(
+          entry?.messaging
+        )
+          ? entry.messaging
+          : [];
 
-        Keep this for future DM/conversation
-        handling.
-      */
-
-      const messages = Array.isArray(
-        entry?.messaging
-      )
-        ? entry.messaging
-        : [];
-
-      for (const event of messages) {
-        await processMessageEvent(
-          instagramUserId,
+      for (
+        const event of messaging
+      ) {
+        await processMessage(
+          webhookInstagramUserId,
           event
         );
       }
@@ -155,17 +202,12 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      received: true,
     });
   } catch (error) {
     console.error(
       "INSTAGRAM WEBHOOK ERROR:",
       error
     );
-
-    /*
-      Always acknowledge Meta with 200.
-    */
 
     return NextResponse.json({
       success: false,
@@ -174,12 +216,12 @@ export async function POST(
 }
 
 /* =========================================================
-   GET CONNECTED INSTAGRAM ACCOUNT
+   FIND CONNECTED ACCOUNT
 ========================================================= */
 
-async function getAccount(
-  instagramUserId: string
-) {
+async function getInstagramAccount(
+  accountId: string
+): Promise<InstagramAccount | null> {
   const supabase =
     createAdminClient();
 
@@ -187,7 +229,9 @@ async function getAccount(
     data,
     error,
   } = await supabase
-    .from("instagram_accounts")
+    .from(
+      "instagram_accounts"
+    )
     .select(
       `
       id,
@@ -201,8 +245,8 @@ async function getAccount(
       `
     )
     .eq(
-      "instagram_user_id",
-      instagramUserId
+      "id",
+      accountId
     )
     .eq(
       "is_connected",
@@ -221,20 +265,22 @@ async function getAccount(
 
   if (!data) {
     console.warn(
-      "NO INSTAGRAM ACCOUNT FOUND:",
-      instagramUserId
+      "NO CONNECTED INSTAGRAM ACCOUNT:",
+      accountId
     );
 
     return null;
   }
 
   /*
-    Refresh long-lived token only when needed.
+    Refresh the token if necessary.
   */
 
   try {
     const refreshed =
-      await refreshAccountIfNeeded(data);
+      await refreshAccountIfNeeded(
+        data
+      );
 
     return {
       ...data,
@@ -243,12 +289,14 @@ async function getAccount(
     };
   } catch (error) {
     console.warn(
-      "TOKEN REFRESH DURING WEBHOOK FAILED:",
+      "TOKEN REFRESH FAILED:",
       error
     );
 
     /*
-      Continue using the current token.
+      Continue with the existing
+      token. If Instagram rejects it,
+      we will see the real API error.
     */
 
     return data;
@@ -259,8 +307,8 @@ async function getAccount(
    PROCESS COMMENT
 ========================================================= */
 
-async function processCommentEvent(
-  instagramUserId: string,
+async function processComment(
+  webhookInstagramUserId: string,
   value: any
 ) {
   try {
@@ -274,16 +322,16 @@ async function processCommentEvent(
 
     console.log(
       "COMMENT VALUE:",
-      JSON.stringify(value, null, 2)
+      JSON.stringify(
+        value,
+        null,
+        2
+      )
     );
 
     console.log(
       "========================================"
     );
-
-    /*
-      Extract comment information.
-    */
 
     const commentId =
       value?.id
@@ -297,17 +345,33 @@ async function processCommentEvent(
 
     const mediaId =
       value?.media?.id
-        ? String(value.media.id)
+        ? String(
+            value.media.id
+          )
         : "";
 
     const commenterId =
       value?.from?.id
-        ? String(value.from.id)
+        ? String(
+            value.from.id
+          )
         : null;
 
     const commenterUsername =
       value?.from?.username ||
       null;
+
+    console.log(
+      "COMMENT DATA:",
+      {
+        webhookInstagramUserId,
+        commentId,
+        mediaId,
+        commentText,
+        commenterId,
+        commenterUsername,
+      }
+    );
 
     if (!commentId) {
       console.warn(
@@ -333,121 +397,17 @@ async function processCommentEvent(
       return;
     }
 
-    console.log(
-      "COMMENT DATA:",
-      {
-        instagramUserId,
-        commentId,
-        mediaId,
-        commentText,
-        commenterId,
-        commenterUsername,
-      }
-    );
-
-    /* =====================================================
-       FIND INSTAGRAM ACCOUNT
-    ===================================================== */
-
-    const account =
-      await getAccount(
-        instagramUserId
-      );
-
-    if (!account) {
-      console.warn(
-        "ACCOUNT NOT FOUND FOR INSTAGRAM USER:",
-        instagramUserId
-      );
-
-      return;
-    }
-
-    console.log(
-      "INSTAGRAM ACCOUNT FOUND:",
-      {
-        id: account.id,
-        user_id: account.user_id,
-        instagram_user_id:
-          account.instagram_user_id,
-        username:
-          account.username,
-      }
-    );
-
     const supabase =
       createAdminClient();
 
     /* =====================================================
-       FIND POST
-
-       The webhook gives us Instagram's media ID.
-
-       Our instagram_posts table stores:
-
-       instagram_account_id
-       instagram_media_id
-    ===================================================== */
-
-    const {
-      data: post,
-      error: postError,
-    } = await supabase
-      .from("instagram_posts")
-      .select(
-        "id, instagram_media_id"
-      )
-      .eq(
-        "instagram_account_id",
-        account.id
-      )
-      .eq(
-        "instagram_media_id",
-        mediaId
-      )
-      .maybeSingle();
-
-    if (postError) {
-      console.error(
-        "INSTAGRAM POST LOOKUP ERROR:",
-        postError
-      );
-
-      return;
-    }
-
-    /*
-      The post may not exist locally.
-
-      That should NOT prevent the automation
-      from working because the automation table
-      already stores the Instagram media ID.
-    */
-
-    console.log(
-      "LOCAL POST:",
-      post
-    );
-
-    /* =====================================================
-       FIND AUTOMATION
-
-       IMPORTANT:
-
-       Your actual table is:
-
-       instagram_automations
-
-       NOT:
-
-       automations
-       automation_posts
-       automation_keywords
+       1. FIND AUTOMATION BY POST
     ===================================================== */
 
     const {
       data: automations,
-      error: automationError,
+      error:
+        automationError,
     } = await supabase
       .from(
         "instagram_automations"
@@ -456,16 +416,12 @@ async function processCommentEvent(
         `
         id,
         user_id,
-        instagram_connection_id,
+        instagram_account_id,
         instagram_post_id,
         trigger_keyword,
         dm_message,
         is_active
         `
-      )
-      .eq(
-        "user_id",
-        account.user_id
       )
       .eq(
         "instagram_post_id",
@@ -503,7 +459,125 @@ async function processCommentEvent(
     }
 
     /* =====================================================
-       MATCH KEYWORD
+       2. FIND AUTOMATION + ACCOUNT
+    ===================================================== */
+
+    let selectedAutomation:
+      | Automation
+      | null = null;
+
+    let account:
+      | InstagramAccount
+      | null = null;
+
+    for (
+      const automation of automations
+    ) {
+      if (
+        !automation
+          .instagram_account_id
+      ) {
+        continue;
+      }
+
+      const candidate =
+        await getInstagramAccount(
+          automation
+            .instagram_account_id
+        );
+
+      if (!candidate) {
+        continue;
+      }
+
+      /*
+        Security check:
+        automation and Instagram account
+        must belong to the same user.
+      */
+
+      if (
+        candidate.user_id !==
+        automation.user_id
+      ) {
+        console.warn(
+          "USER ID MISMATCH:",
+          {
+            automationUserId:
+              automation.user_id,
+
+            accountUserId:
+              candidate.user_id,
+
+            automationId:
+              automation.id,
+
+            accountId:
+              candidate.id,
+          }
+        );
+
+        continue;
+      }
+
+      selectedAutomation =
+        automation;
+
+      account =
+        candidate;
+
+      break;
+    }
+
+    if (
+      !selectedAutomation ||
+      !account
+    ) {
+      console.warn(
+        "NO INSTAGRAM ACCOUNT FOUND FOR AUTOMATION:",
+        {
+          mediaId,
+
+          webhookInstagramUserId,
+
+          automationCount:
+            automations.length,
+        }
+      );
+
+      return;
+    }
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "INSTAGRAM ACCOUNT FOUND"
+    );
+
+    console.log({
+      accountId:
+        account.id,
+
+      databaseInstagramUserId:
+        account.instagram_user_id,
+
+      webhookInstagramUserId,
+
+      username:
+        account.username,
+
+      automationId:
+        selectedAutomation.id,
+    });
+
+    console.log(
+      "========================================"
+    );
+
+    /* =====================================================
+       3. KEYWORD MATCH
     ===================================================== */
 
     const normalizedComment =
@@ -511,51 +585,38 @@ async function processCommentEvent(
         .toLowerCase()
         .trim();
 
-    let matchedAutomation:
-      | any
-      | null = null;
+    const keyword =
+      String(
+        selectedAutomation
+          .trigger_keyword ||
+          ""
+      )
+        .toLowerCase()
+        .trim();
 
-    for (
-      const automation of automations
-    ) {
-      const keyword =
-        String(
-          automation.trigger_keyword ||
-            ""
-        )
-          .toLowerCase()
-          .trim();
+    console.log(
+      "KEYWORD CHECK:",
+      {
+        comment:
+          normalizedComment,
 
-      if (!keyword) {
-        continue;
+        keyword,
       }
+    );
 
-      console.log(
-        "CHECKING KEYWORD:",
-        {
-          keyword,
-          comment:
-            normalizedComment,
-        }
+    if (!keyword) {
+      console.warn(
+        "AUTOMATION KEYWORD IS EMPTY"
       );
 
-      if (
-        normalizedComment.includes(
-          keyword
-        )
-      ) {
-        matchedAutomation =
-          automation;
-
-        break;
-      }
+      return;
     }
 
-    /* =====================================================
-       NO MATCH
-    ===================================================== */
-
-    if (!matchedAutomation) {
+    if (
+      !normalizedComment.includes(
+        keyword
+      )
+    ) {
       console.log(
         "KEYWORD NOT MATCHED"
       );
@@ -571,22 +632,31 @@ async function processCommentEvent(
       "AUTOMATION MATCHED"
     );
 
-    console.log(
-      matchedAutomation
-    );
+    console.log({
+      automationId:
+        selectedAutomation.id,
+
+      postId:
+        selectedAutomation
+          .instagram_post_id,
+
+      keyword:
+        selectedAutomation
+          .trigger_keyword,
+
+      dm:
+        selectedAutomation.dm_message,
+    });
 
     console.log(
       "========================================"
     );
 
     /* =====================================================
-       SEND PRIVATE DM
+       4. SEND PRIVATE REPLY
     ===================================================== */
 
-    const accessToken =
-      account.access_token;
-
-    if (!accessToken) {
+    if (!account.access_token) {
       console.error(
         "INSTAGRAM ACCESS TOKEN MISSING"
       );
@@ -596,33 +666,33 @@ async function processCommentEvent(
 
     const dmMessage =
       String(
-        matchedAutomation.dm_message ||
+        selectedAutomation
+          .dm_message ||
           ""
       ).trim();
 
     if (!dmMessage) {
       console.warn(
-        "AUTOMATION DM MESSAGE IS EMPTY"
+        "DM MESSAGE IS EMPTY"
       );
 
       return;
     }
 
     console.log(
-      "SENDING INSTAGRAM DM:",
-      {
-        commentId,
-        instagramUserId,
-        message:
-          dmMessage,
-      }
+      "SENDING PRIVATE INSTAGRAM DM..."
     );
 
     const result =
       await sendPrivateReply({
-        instagramUserId,
-        accessToken,
+        instagramUserId:
+          webhookInstagramUserId,
+
+        accessToken:
+          account.access_token,
+
         commentId,
+
         message:
           dmMessage,
       });
@@ -634,8 +704,9 @@ async function processCommentEvent(
 
     if (!result.success) {
       console.error(
-        "INSTAGRAM DM FAILED:",
-        result.data
+        "PRIVATE INSTAGRAM DM FAILED:",
+        result.data ||
+          result.error
       );
 
       return;
@@ -656,7 +727,7 @@ async function processCommentEvent(
 
     console.log(
       "KEYWORD:",
-      matchedAutomation.trigger_keyword
+      keyword
     );
 
     console.log(
@@ -669,14 +740,14 @@ async function processCommentEvent(
     );
   } catch (error) {
     console.error(
-      "COMMENT PROCESS ERROR:",
+      "COMMENT PROCESSING ERROR:",
       error
     );
   }
 }
 
 /* =========================================================
-   SEND PRIVATE REPLY
+   SEND PRIVATE COMMENT REPLY
 ========================================================= */
 
 async function sendPrivateReply({
@@ -697,7 +768,7 @@ async function sendPrivateReply({
       );
 
     console.log(
-      "INSTAGRAM DM URL:",
+      "INSTAGRAM DM ENDPOINT:",
       url
     );
 
@@ -731,14 +802,24 @@ async function sendPrivateReply({
       );
 
     const data =
-      await readJson(response);
-
-    if (!response.ok) {
-      console.error(
-        "PRIVATE REPLY ERROR:",
-        data
+      await readJson(
+        response
       );
 
+    console.log(
+      "INSTAGRAM DM API RESPONSE:",
+      {
+        status:
+          response.status,
+
+        ok:
+          response.ok,
+
+        data,
+      }
+    );
+
+    if (!response.ok) {
       if (
         isInstagramTokenError(
           data
@@ -757,7 +838,6 @@ async function sendPrivateReply({
 
     return {
       success:
-        response.ok &&
         Boolean(
           data?.message_id ||
             data?.id
@@ -779,135 +859,29 @@ async function sendPrivateReply({
 }
 
 /* =========================================================
-   PROCESS NORMAL INSTAGRAM MESSAGE
+   PROCESS INSTAGRAM MESSAGES
 ========================================================= */
 
-async function processMessageEvent(
-  instagramUserId: string,
+async function processMessage(
+  webhookInstagramUserId: string,
   event: any
 ) {
   try {
-    const senderId =
-      event?.sender?.id;
-
-    const message =
-      event?.message;
-
-    if (
-      !senderId ||
-      !message
-    ) {
-      return;
-    }
-
-    const account =
-      await getAccount(
-        instagramUserId
-      );
-
-    if (!account) {
-      return;
-    }
-
-    const supabase =
-      createAdminClient();
-
-    const username =
-      message?.from?.username ||
-      null;
-
     /*
-      Save conversation if the tables exist.
+      Message handling is kept separate from
+      comment-to-DM automation.
     */
 
-    const {
-      data: conversation,
-      error: conversationError,
-    } =
-      await supabase
-        .from(
-          "instagram_conversations"
-        )
-        .upsert(
-          {
-            instagram_account_id:
-              account.id,
-
-            instagram_scoped_user_id:
-              String(senderId),
-
-            username,
-
-            last_message_at:
-              new Date(
-                event?.timestamp ||
-                  Date.now()
-              ).toISOString(),
-
-            last_message_text:
-              message?.text ||
-              null,
-
-            updated_at:
-              new Date().toISOString(),
-          },
-          {
-            onConflict:
-              "instagram_account_id,instagram_scoped_user_id",
-          }
-        )
-        .select("id")
-        .single();
-
-    if (
-      conversationError ||
-      !conversation
-    ) {
-      console.warn(
-        "CONVERSATION SAVE ERROR:",
-        conversationError
-      );
-
-      return;
-    }
-
-    await supabase
-      .from(
-        "instagram_messages"
-      )
-      .upsert(
-        {
-          conversation_id:
-            conversation.id,
-
-          instagram_message_id:
-            message.mid ||
-            null,
-
-          direction:
-            "inbound",
-
-          message_text:
-            message.text ||
-            null,
-
-          sent_at:
-            new Date(
-              event?.timestamp ||
-                Date.now()
-            ).toISOString(),
-
-          raw_payload:
-            event,
-        },
-        {
-          onConflict:
-            "instagram_message_id",
-        }
-      );
+    console.log(
+      "INSTAGRAM MESSAGE EVENT:",
+      {
+        webhookInstagramUserId,
+        event,
+      }
+    );
   } catch (error) {
     console.error(
-      "MESSAGE EVENT ERROR:",
+      "MESSAGE PROCESSING ERROR:",
       error
     );
   }
