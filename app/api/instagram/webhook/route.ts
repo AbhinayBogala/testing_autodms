@@ -470,6 +470,25 @@ async function processComment(
       }
     );
 
+    // Ignore comments created by our own Instagram account.
+    // Meta sends our public replies back through the comments webhook.
+    if (
+      commenterId &&
+      commenterId === webhookInstagramUserId
+    ) {
+      console.log(
+        "IGNORING OWN INSTAGRAM COMMENT:",
+        {
+          commentId,
+          commentText,
+          commenterId,
+          webhookInstagramUserId,
+        }
+      );
+
+      return;
+    }
+
     if (!commentId) {
       console.warn(
         "COMMENT ID MISSING"
@@ -1121,6 +1140,34 @@ async function saveInstagramComment({
     .eq("instagram_media_id", mediaId)
     .maybeSingle();
 
+  // The automation is stored in instagram_automations, while
+  // instagram_comments.automation_id may reference automations.id.
+  // Only store the automation_id when that parent row actually exists.
+  let safeAutomationId: string | null = null;
+
+  if (automationId) {
+    const { data: parentAutomation, error: parentAutomationError } =
+      await supabase
+        .from("automations")
+        .select("id")
+        .eq("id", automationId)
+        .maybeSingle();
+
+    if (parentAutomationError) {
+      console.warn(
+        "AUTOMATION PARENT LOOKUP FAILED:",
+        parentAutomationError
+      );
+    } else if (parentAutomation) {
+      safeAutomationId = parentAutomation.id;
+    } else {
+      console.warn(
+        "AUTOMATION ID NOT FOUND IN automations; SAVING NULL automation_id:",
+        automationId
+      );
+    }
+  }
+
   const { error } = await supabase
     .from("instagram_comments")
     .upsert(
@@ -1131,7 +1178,7 @@ async function saveInstagramComment({
         commenter_instagram_id: commenterId,
         commenter_username: commenterUsername,
         comment_text: commentText,
-        automation_id: automationId,
+        automation_id: safeAutomationId,
         dm_sent: dmSent,
         public_reply_sent: publicReplySent,
       },
@@ -1361,6 +1408,24 @@ async function processMessage(
   event: any
 ) {
   try {
+    // Ignore outgoing messages echoed back by Meta.
+    // Prevents our own DMs from being processed as inbound messages.
+    if (
+      event?.message?.is_self === true ||
+      event?.message?.is_echo === true
+    ) {
+      console.log(
+        "IGNORING OWN INSTAGRAM MESSAGE ECHO:",
+        {
+          isSelf: event?.message?.is_self,
+          isEcho: event?.message?.is_echo,
+          messageId: event?.message?.mid ?? null,
+        }
+      );
+
+      return;
+    }
+
     console.log(
       "PROCESSING INSTAGRAM MESSAGE:",
       JSON.stringify(event, null, 2)
