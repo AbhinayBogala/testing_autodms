@@ -1,29 +1,45 @@
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import ConnectInstagramButton from "./ConnectInstagramButton";
+
 import SyncInstagramButton from "./SyncInstagramButton";
+
 import DisconnectInstagramButton from "./DisconnectInstagramButton";
+
 import PostsGrid from "./PostsGrid";
 
 
+
 export const dynamic = "force-dynamic";
+
 export const revalidate = 0;
+
+
 
 
 
 type InstagramPost = {
 
   id: string;
+
   instagram_media_id: string;
+
   caption: string | null;
+
   media_type: string | null;
+
   media_url: string | null;
+
   permalink: string | null;
+
   published_at: string | null;
+
   likes_count: number | null;
+
   comments_count: number | null;
 
 };
@@ -32,19 +48,32 @@ type InstagramPost = {
 
 
 
+
+
+
+
 export default async function DashboardPage(){
+
 
 
   const supabase = await createClient();
 
 
 
+
+
   const {
+
     data:{
+
       user
+
     }
 
   } = await supabase.auth.getUser();
+
+
+
 
 
 
@@ -60,31 +89,94 @@ export default async function DashboardPage(){
 
 
 
+
+
+
+
+
+  // ============================================================
+  // GET CURRENTLY CONNECTED INSTAGRAM ACCOUNT
+  // ============================================================
+
   const {
-    data:account
+
+    data: account,
+
+    error: accountError
 
   } = await supabase
 
     .from("instagram_accounts")
 
     .select(
+
       `
+
       id,
+
       username,
+
       followers_count,
+
       following_count,
+
       is_connected,
-      token_expires_at
+
+      token_expires_at,
+
+      connected_at
+
       `
+
     )
 
     .eq(
+
       "user_id",
+
       user.id
+
     )
+
+    .eq(
+
+      "is_connected",
+
+      true
+
+    )
+
+    .order(
+
+      "connected_at",
+
+      {
+
+        ascending: false,
+
+        nullsFirst: false
+
+      }
+
+    )
+
+    .limit(1)
 
     .maybeSingle();
 
+
+
+  if(accountError){
+
+    console.error(
+
+      "INSTAGRAM DASHBOARD ACCOUNT ERROR:",
+
+      accountError
+
+    );
+
+  }
 
 
 
@@ -99,21 +191,35 @@ export default async function DashboardPage(){
 
 
 
+
+
+
+
+
   const {
-    data:automationData
+
+    data: automationData
 
   } = await admin
 
     .from("instagram_automations")
 
     .select(
+
       "id,is_active"
+
     )
 
     .eq(
+
       "user_id",
+
       user.id
+
     );
+
+
+
 
 
 
@@ -123,11 +229,21 @@ export default async function DashboardPage(){
     (automationData ?? [])
 
     .filter(
+
       item =>
+
         item.is_active === true
+
     )
 
     .length;
+
+
+
+
+
+
+
 
 
 
@@ -145,41 +261,69 @@ export default async function DashboardPage(){
 
 
 
+
+
+
+
+
   if(account?.is_connected){
 
 
 
+
+
     const {
-      data:postData
+
+      data: postData
 
     } = await admin
 
       .from("instagram_posts")
 
       .select(
+
         `
+
         id,
+
         instagram_media_id,
+
         caption,
+
         media_type,
+
         media_url,
+
         permalink,
+
         published_at,
+
         likes_count,
+
         comments_count
+
         `
+
       )
 
       .eq(
+
         "instagram_account_id",
+
         account.id
+
       )
 
       .order(
+
         "published_at",
+
         {
+
           ascending:false
+
         }
+
       )
 
       .limit(12);
@@ -187,7 +331,11 @@ export default async function DashboardPage(){
 
 
 
+
+
+
     posts =
+
       (postData ?? []) as InstagramPost[];
 
 
@@ -195,7 +343,13 @@ export default async function DashboardPage(){
 
 
 
+
+
+
+
+
     const {
+
       count
 
     } = await admin
@@ -203,24 +357,48 @@ export default async function DashboardPage(){
       .from("instagram_posts")
 
       .select(
+
         "*",
+
         {
+
           count:"exact",
+
           head:true
+
         }
+
       )
 
       .eq(
+
         "instagram_account_id",
+
         account.id
+
       );
+
+
 
 
 
     postsCount = count ?? 0;
 
 
+
   }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -240,30 +418,46 @@ export default async function DashboardPage(){
 
 
 
+
+
       {/* HEADER */}
+
 
 
       <div className="flex items-start justify-between">
 
 
+
         <div>
 
 
+
           <p className="text-sm text-gray-500">
+
             Overview
+
           </p>
+
+
 
 
 
           <h1 className="mt-2 text-4xl font-bold">
+
             Dashboard
+
           </h1>
 
 
 
+
+
           <p className="mt-2 text-gray-400">
+
             Manage Instagram content, DMs and automations.
+
           </p>
+
 
 
         </div>
@@ -272,7 +466,12 @@ export default async function DashboardPage(){
 
 
 
+
+
+
+
         {
+
           account?.is_connected && (
 
             <div className="flex items-center gap-3">
@@ -284,7 +483,10 @@ export default async function DashboardPage(){
             </div>
 
           )
+
         }
+
+
 
 
 
@@ -298,38 +500,72 @@ export default async function DashboardPage(){
 
 
 
+
+
+
+
+
+
+
+
       {
+
         !account?.is_connected ? (
 
           <div className="
+
             mt-20
+
             mx-auto
+
             max-w-xl
+
             rounded-3xl
+
             border
+
             border-white/10
+
             bg-white/[0.04]
+
             p-12
+
             text-center
+
           ">
 
 
+
             <div className="text-5xl">
+
               ✨
+
             </div>
 
 
 
+
+
             <h2 className="mt-6 text-3xl font-bold">
+
               Connect your Instagram
+
             </h2>
 
 
 
+
+
             <p className="mt-4 text-gray-400">
+
               Connect your professional account to start managing comments,
+
               DMs and automations.
+
             </p>
+
+
+
 
 
 
@@ -337,14 +573,19 @@ export default async function DashboardPage(){
             <div className="mt-8">
 
               <ConnectInstagramButton
+
                 label="Connect Instagram"
+
               />
 
             </div>
 
 
 
+
+
           </div>
+
 
 
         )
@@ -359,16 +600,28 @@ export default async function DashboardPage(){
 
 
 
+
+
+
+
           {/* STATS */}
 
 
+
           <div className="
+
             mt-10
+
             grid
+
             gap-5
+
             md:grid-cols-2
+
             lg:grid-cols-4
+
           ">
+
 
 
             <StatCard
@@ -376,12 +629,18 @@ export default async function DashboardPage(){
               label="Followers"
 
               value={
+
                 formatNumber(
+
                   account.followers_count
+
                 )
+
               }
 
             />
+
+
 
 
 
@@ -390,10 +649,14 @@ export default async function DashboardPage(){
               label="Posts"
 
               value={
+
                 String(postsCount)
+
               }
 
             />
+
+
 
 
 
@@ -402,12 +665,18 @@ export default async function DashboardPage(){
               label="Following"
 
               value={
+
                 formatNumber(
+
                   account.following_count
+
                 )
+
               }
 
             />
+
+
 
 
 
@@ -416,13 +685,24 @@ export default async function DashboardPage(){
               label="Active Automations"
 
               value={
+
                 String(activeAutomations)
+
               }
 
             />
 
 
+
           </div>
+
+
+
+
+
+
+
+
 
 
 
@@ -435,55 +715,87 @@ export default async function DashboardPage(){
           {/* TOKEN */}
 
 
+
           <div className="
+
             mt-8
+
             rounded-3xl
+
             border
+
             border-white/10
+
             bg-white/[0.04]
+
             p-6
+
           ">
 
 
+
             <p className="text-sm text-gray-500">
+
               Instagram Token
+
             </p>
+
+
 
 
 
             <p className="mt-3 text-2xl font-bold">
 
 
+
               {
+
                 account.token_expires_at
 
                 ?
 
                 new Date(
+
                   account.token_expires_at
+
                 )
+
                 .toLocaleDateString(
+
                   "en-IN",
+
                   {
+
                     day:"2-digit",
+
                     month:"short",
+
                     year:"numeric"
+
                   }
+
                 )
 
                 :
 
                 "Managed automatically"
+
               }
 
 
+
             </p>
+
+
 
 
 
             <p className="mt-2 text-sm text-green-400">
+
               ● Long-lived token active
+
             </p>
+
 
 
           </div>
@@ -496,40 +808,70 @@ export default async function DashboardPage(){
 
 
 
+
+
+
+
+
+
+
+
           {/* POSTS */}
+
 
 
           <section className="mt-10">
 
 
+
             <h2 className="text-2xl font-bold">
+
               Recent Posts
+
             </h2>
 
 
 
+
+
             <p className="mt-2 text-gray-500">
+
               Click a post to view media and description.
+
             </p>
 
 
 
 
 
+
+
+
+
             {
+
               posts.length === 0
 
               ?
 
               <div className="
+
                 mt-6
+
                 rounded-2xl
+
                 border
+
                 border-white/10
+
                 bg-white/[0.03]
+
                 p-10
+
                 text-center
+
                 text-gray-400
+
               ">
 
                 No posts synced yet.
@@ -541,6 +883,7 @@ export default async function DashboardPage(){
               </div>
 
 
+
               :
 
               <PostsGrid posts={posts}/>
@@ -549,7 +892,11 @@ export default async function DashboardPage(){
 
 
 
+
+
           </section>
+
+
 
 
 
@@ -563,11 +910,21 @@ export default async function DashboardPage(){
 
 
 
+
+
+
+
     </div>
 
   );
 
 }
+
+
+
+
+
+
 
 
 
@@ -590,15 +947,23 @@ function StatCard({
 }){
 
 
+
   return (
 
     <div className="
+
       rounded-2xl
+
       border
+
       border-white/10
+
       bg-white/[0.04]
+
       p-6
+
     ">
+
 
 
       <p className="text-sm text-gray-500">
@@ -609,11 +974,14 @@ function StatCard({
 
 
 
+
+
       <p className="mt-3 text-3xl font-bold">
 
         {value}
 
       </p>
+
 
 
     </div>
@@ -628,15 +996,28 @@ function StatCard({
 
 
 
+
+
+
+
+
+
 function formatNumber(
+
   value:number|null
+
 ){
 
   return new Intl.NumberFormat(
+
     "en-IN"
+
   )
+
   .format(
+
     value ?? 0
+
   );
 
 }

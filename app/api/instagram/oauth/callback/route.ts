@@ -320,6 +320,40 @@ export async function GET(
       issuedAt.toISOString();
 
     // =======================================================
+    // DISCONNECT PREVIOUS INSTAGRAM ACCOUNTS
+    // =======================================================
+    //
+    // A user can connect a different Instagram account.
+    // Before activating the new account, disconnect any
+    // previously connected account belonging to this user.
+    // This prevents the dashboard from selecting an old
+    // connected account.
+
+    const {
+      error: disconnectOldAccountsError,
+    } = await supabaseAdmin
+      .from("instagram_accounts")
+      .update({
+        is_connected: false,
+        updated_at: now,
+      })
+      .eq("user_id", user.id)
+      .eq("is_connected", true);
+
+    if (disconnectOldAccountsError) {
+      console.error(
+        "DISCONNECT OLD INSTAGRAM ACCOUNTS ERROR:",
+        disconnectOldAccountsError
+      );
+
+      return dashboardError(
+        request,
+        disconnectOldAccountsError.message ||
+          "Could not disconnect the previous Instagram account"
+      );
+    }
+
+    // =======================================================
     // 5. SAVE ACCOUNT
     // =======================================================
 
