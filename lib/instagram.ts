@@ -157,11 +157,21 @@ export async function exchangeForLongLivedToken(
     shortLivedToken
   );
 
+  console.log(
+    "INSTAGRAM LONG-LIVED TOKEN REQUEST",
+    {
+      endpoint:
+        url.origin +
+        url.pathname,
+      method: "POST",
+    }
+  );
+
   const response =
     await fetch(
       url.toString(),
       {
-        method: "GET",
+        method: "POST",
         cache: "no-store",
       }
     );
@@ -179,6 +189,8 @@ export async function exchangeForLongLivedToken(
       {
         status:
           response.status,
+        statusText:
+          response.statusText,
         data,
       }
     );
@@ -188,6 +200,10 @@ export async function exchangeForLongLivedToken(
         "Could not exchange Instagram token"
     );
   }
+
+  console.log(
+    "INSTAGRAM LONG-LIVED TOKEN EXCHANGE SUCCESS"
+  );
 
   return data as InstagramToken;
 }
@@ -225,6 +241,7 @@ export async function refreshLongLivedToken(
       endpoint:
         url.origin +
         url.pathname,
+      method: "GET",
     }
   );
 
@@ -250,10 +267,8 @@ export async function refreshLongLivedToken(
       {
         status:
           response.status,
-
         statusText:
           response.statusText,
-
         data,
       }
     );
