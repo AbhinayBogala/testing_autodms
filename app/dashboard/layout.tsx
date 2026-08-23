@@ -4,144 +4,101 @@ import { createClient } from "@/lib/supabase/server";
 
 import ConnectInstagramButton from "./ConnectInstagramButton";
 
-
 const navigation = [
-
   {
     name: "Dashboard",
     href: "/dashboard",
     icon: "⌂",
   },
-
   {
     name: "Content",
     href: "/dashboard/content",
     icon: "▣",
   },
-
   {
     name: "Automations",
     href: "/dashboard/automations",
     icon: "⚡",
   },
-
   {
     name: "Analytics",
     href: "/dashboard/analytics",
     icon: "◒",
   },
-
   {
     name: "Settings",
     href: "/dashboard/settings",
     icon: "⚙",
   },
-
 ];
 
-
-
-
 export default async function DashboardLayout({
-
   children,
-
 }: {
-
   children: React.ReactNode;
-
 }) {
-
-
-
   const supabase = await createClient();
 
-
-
-
   const {
-
-    data:{
-      user
-    }
-
+    data: { user },
   } = await supabase.auth.getUser();
 
-
-
-
-
-  if(!user){
-
+  if (!user) {
     redirect("/login");
-
   }
 
-
-
-
-
-
-
+  /*
+   * A user can have multiple Instagram accounts.
+   *
+   * Fetch all accounts and then select the account
+   * that is currently marked as connected.
+   */
   const {
-
-    data:account
-
+    data: accounts,
+    error: accountError,
   } = await supabase
-
     .from("instagram_accounts")
-
-    .select(
-      `
+    .select(`
+      id,
       username,
       profile_picture_url,
       is_connected
-      `
-    )
+    `)
+    .eq("user_id", user.id)
+    .order("updated_at", {
+      ascending: false,
+    });
 
-    .eq(
-      "user_id",
-      user.id
-    )
-
-    .maybeSingle();
-
-
-
-
-
-  const connected =
-    Boolean(
-      account?.is_connected
+  if (accountError) {
+    console.error(
+      "DASHBOARD LAYOUT ACCOUNT ERROR:",
+      accountError
     );
+  }
 
+  /*
+   * The active Instagram account is the account
+   * whose is_connected value is true.
+   */
+  const account =
+    accounts?.find(
+      (item) => item.is_connected === true
+    ) ?? null;
 
-
-
-
-
-
+  const connected = Boolean(
+    account?.is_connected
+  );
 
   return (
-
     <div
-
       className="
         min-h-screen
         bg-[#050505]
         text-white
       "
-
     >
-
-
-
-
-
       {/* SIDEBAR */}
-
       <aside
-
         className="
           fixed
           left-0
@@ -156,65 +113,32 @@ export default async function DashboardLayout({
           px-5
           py-6
         "
-
       >
-
-
-
-
-
         {/* BRAND */}
-
-
         <div>
-
-
           <h1
-
             className="
               text-2xl
               font-bold
               tracking-tight
             "
-
           >
-
             AUTO DM
-
           </h1>
 
-
-
           <p
-
             className="
               mt-1
               text-xs
               text-gray-500
             "
-
           >
-
             Instagram Automation
-
           </p>
-
-
         </div>
 
-
-
-
-
-
-
-
-
-        {/* ACCOUNT CARD */}
-
-
+        {/* ACTIVE INSTAGRAM ACCOUNT */}
         <div
-
           className="
             mt-8
             rounded-3xl
@@ -223,52 +147,32 @@ export default async function DashboardLayout({
             bg-white/[0.04]
             p-5
           "
-
         >
-
-
-
-
           <div
-
             className="
               flex
               items-center
               gap-3
             "
-
           >
-
-
-
-            {
-              account?.profile_picture_url
-
-              ?
-
+            {account?.profile_picture_url ? (
               <img
-
-                src={
-                  account.profile_picture_url
+                src={account.profile_picture_url}
+                alt={
+                  account.username
+                    ? `@${account.username}`
+                    : "Instagram"
                 }
-
-                alt="Instagram"
-
                 referrerPolicy="no-referrer"
-
                 className="
                   h-12
                   w-12
                   rounded-full
                   object-cover
                 "
-
               />
-
-              :
-
+            ) : (
               <div
-
                 className="
                   flex
                   h-12
@@ -278,196 +182,90 @@ export default async function DashboardLayout({
                   rounded-full
                   bg-white/10
                 "
-
               >
-
                 ◎
-
               </div>
+            )}
 
-            }
-
-
-
-
-
-
-
-
-            <div>
-
-
+            <div className="min-w-0">
               <p
-
                 className="
+                  truncate
                   font-semibold
                 "
-
               >
-
-                @{account?.username ?? "Instagram"}
-
+                {account?.username
+                  ? `@${account.username}`
+                  : "@Instagram"}
               </p>
-
-
-
-
 
               <p
-
                 className={
-
                   connected
-
-                  ?
-
-                  "text-xs text-green-400"
-
-                  :
-
-                  "text-xs text-red-400"
-
+                    ? "text-xs text-green-400"
+                    : "text-xs text-red-400"
                 }
-
               >
-
-                ● {connected ? "Connected" : "Disconnected"}
-
+                ●{" "}
+                {connected
+                  ? "Connected"
+                  : "Disconnected"}
               </p>
-
-
-
             </div>
-
-
-
           </div>
 
-
-
-
-
-
-
-          {
-            !connected && (
-
-              <div className="mt-5">
-
-                <ConnectInstagramButton
-
-                  label="Connect Instagram"
-
-                />
-
-              </div>
-
-            )
-          }
-
-
-
-
-
-
+          {!connected && (
+            <div className="mt-5">
+              <ConnectInstagramButton
+                label="Connect Instagram"
+              />
+            </div>
+          )}
         </div>
 
-
-
-
-
-
-
-
-
-
-
-
         {/* NAVIGATION */}
-
-
         <nav
-
           className="
             mt-8
             space-y-2
           "
-
         >
+          {navigation.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              className="
+                group
+                flex
+                items-center
+                gap-3
+                rounded-xl
+                px-4
+                py-3
+                text-sm
+                text-gray-400
+                transition
+                hover:bg-white/[0.06]
+                hover:text-white
+              "
+            >
+              <span
+                className="
+                  text-lg
+                  transition
+                  group-hover:scale-110
+                "
+              >
+                {item.icon}
+              </span>
 
-
-
-          {
-            navigation.map(
-              item => (
-
-                <a
-
-                  key={item.href}
-
-                  href={item.href}
-
-                  className="
-                    group
-                    flex
-                    items-center
-                    gap-3
-                    rounded-xl
-                    px-4
-                    py-3
-                    text-sm
-                    text-gray-400
-                    transition
-                    hover:bg-white/[0.06]
-                    hover:text-white
-                  "
-
-                >
-
-
-                  <span
-
-                    className="
-                      text-lg
-                      transition
-                      group-hover:scale-110
-                    "
-
-                  >
-
-                    {item.icon}
-
-                  </span>
-
-
-
-                  {item.name}
-
-
-
-                </a>
-
-
-              )
-            )
-          }
-
-
+              {item.name}
+            </a>
+          ))}
         </nav>
 
-
-
-
-
-
-
-
-
         {/* FOOTER */}
-
-
         <div
-
           className="
             absolute
             bottom-6
@@ -477,67 +275,30 @@ export default async function DashboardLayout({
             border-white/10
             pt-5
           "
-
         >
-
-
           <p
-
             className="
               truncate
               text-xs
               text-gray-500
             "
-
           >
-
             {user.email}
-
           </p>
-
-
         </div>
-
-
-
-
-
-
       </aside>
 
-
-
-
-
-
-
-
-
       {/* PAGE CONTENT */}
-
-
       <main
-
         className="
           ml-72
           min-h-screen
           px-8
           py-8
         "
-
       >
-
         {children}
-
-
       </main>
-
-
-
-
-
     </div>
-
   );
-
 }
