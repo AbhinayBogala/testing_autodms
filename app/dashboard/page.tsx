@@ -1,60 +1,38 @@
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
-
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import ConnectInstagramButton from "./ConnectInstagramButton";
-
 import SyncInstagramButton from "./SyncInstagramButton";
-
 import DisconnectInstagramButton from "./DisconnectInstagramButton";
-
 import PostsGrid from "./PostsGrid";
 
 export const dynamic = "force-dynamic";
-
 export const revalidate = 0;
 
 type InstagramPost = {
   id: string;
-
   instagram_media_id: string;
-
   caption: string | null;
-
   media_type: string | null;
-
   media_url: string | null;
-
   permalink: string | null;
-
   published_at: string | null;
-
   likes_count: number | null;
-
   comments_count: number | null;
 };
 
 type InstagramAccount = {
   id: string;
-
   username: string | null;
-
   profile_picture_url: string | null;
-
   followers_count: number | null;
-
   following_count: number | null;
-
   media_count: number | null;
-
   is_connected: boolean;
-
   token_expires_at: string | null;
-
   connected_at: string | null;
-
   updated_at: string | null;
 };
 
@@ -62,9 +40,7 @@ export default async function DashboardPage() {
   const supabase = await createClient();
 
   const {
-    data: {
-      user,
-    },
+    data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
@@ -112,10 +88,19 @@ export default async function DashboardPage() {
       }
     );
 
+  // ============================================================
+  // IMPROVED SUPABASE ERROR LOGGING
+  // ============================================================
+
   if (accountError) {
     console.error(
       "INSTAGRAM DASHBOARD ACCOUNT ERROR:",
-      accountError
+      {
+        message: accountError.message,
+        details: accountError.details,
+        hint: accountError.hint,
+        code: accountError.code,
+      }
     );
   }
 
@@ -176,7 +161,6 @@ export default async function DashboardPage() {
   let postsCount = 0;
 
   if (account?.is_connected) {
-
     const {
       data: postData,
     } = await admin
@@ -434,10 +418,10 @@ export default async function DashboardPage() {
 
           {/* ==================================================
               ALL INSTAGRAM ACCOUNTS
-              
+
               This appears only when more than one account
               exists in Supabase.
-              
+
               The page does NOT delete old accounts.
           ================================================== */}
 

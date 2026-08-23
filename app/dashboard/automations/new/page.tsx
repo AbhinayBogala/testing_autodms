@@ -67,6 +67,16 @@ export default async function NewAutomationPage({
       redirect("/admin/login");
     }
 
+    /*
+     * IMPORTANT:
+     *
+     * instagram_post_id in instagram_automations stores
+     * the Supabase instagram_posts.id UUID.
+     *
+     * instagram_posts.instagram_media_id stores the
+     * actual Instagram media ID.
+     */
+
     const instagramPostId = String(
       formData.get("instagram_post_id") ?? ""
     ).trim();
@@ -83,14 +93,31 @@ export default async function NewAutomationPage({
       formData.get("dm_message") ?? ""
     ).trim();
 
+    /*
+     * PUBLIC COMMENT REPLY
+     *
+     * Checkbox explicitly sends:
+     * value="true"
+     */
+    const rawReplyEnabled =
+      formData.get("reply_enabled");
+
     const replyEnabled =
-      formData.get("reply_enabled") === "on";
+      rawReplyEnabled === "true";
 
     const replyText = String(
       formData.get("reply_text") ?? ""
     ).trim();
 
-    
+    console.log(
+      "PUBLIC REPLY FORM DATA:",
+      {
+        replyEnabled,
+        replyText,
+        rawReplyEnabled,
+      }
+    );
+
     const buttonName = String(
       formData.get("button_name") ?? ""
     ).trim();
@@ -148,6 +175,15 @@ export default async function NewAutomationPage({
       );
     }
 
+    /*
+     * If public reply is enabled, require reply text.
+     */
+    if (replyEnabled && !replyText) {
+      redirect(
+        "/dashboard/automations/new?error=Please+enter+a+public+reply+message."
+      );
+    }
+
     const {
       data: account,
       error: accountError,
@@ -178,6 +214,9 @@ export default async function NewAutomationPage({
       );
     }
 
+    /*
+     * instagramPostId is the Supabase post UUID.
+     */
     const {
       data: post,
       error: postError,
@@ -207,8 +246,11 @@ export default async function NewAutomationPage({
     /*
      * Prevent duplicate automation for the same
      * account + post + trigger configuration.
+     *
+     * IMPORTANT:
+     * instagram_automations.instagram_post_id
+     * stores instagram_posts.id.
      */
-
     const {
       data: existingAutomations,
       error: duplicateError,
@@ -217,10 +259,13 @@ export default async function NewAutomationPage({
       .select(
         "id, trigger_type, trigger_keywords, trigger_keyword"
       )
-      .eq("instagram_account_id", account.id)
+      .eq(
+        "instagram_account_id",
+        account.id
+      )
       .eq(
         "instagram_post_id",
-        post.instagram_media_id
+        post.id
       );
 
     if (duplicateError) {
@@ -253,6 +298,10 @@ export default async function NewAutomationPage({
             return false;
           }
 
+          /*
+           * Only one any_comment automation
+           * per post.
+           */
           if (
             triggerType ===
             "any_comment"
@@ -305,45 +354,114 @@ export default async function NewAutomationPage({
      * Keep trigger_keyword populated for backward
      * compatibility with the current webhook.
      */
-
     const legacyKeyword =
       triggerType === "keywords"
         ? triggerKeywords[0] ?? ""
         : "";
+
+    /*
+     * IMPORTANT:
+     *
+     * Store post.id, NOT post.instagram_media_id.
+     *
+     * post.id:
+     *   Supabase UUID
+     *
+     * post.instagram_media_id:
+     *   Instagram media ID
+     */
+
+    console.log(
+      "CREATING INSTAGRAM AUTOMATION:",
+      {
+        userId: user.id,
+        accountId: account.id,
+        postId: post.id,
+        instagramMediaId:
+          post.instagram_media_id,
+        triggerType,
+        triggerKeywords,
+        dmMessage,
+        replyEnabled,
+        replyText,
+        buttonName,
+        buttonUrl,
+        isActive,
+      }
+    );
 
     const { error: insertError } =
       await supabase
         .from("instagram_automations")
         .insert({
           user_id: user.id,
+
           instagram_account_id:
             account.id,
+
           instagram_post_id:
-            post.instagram_media_id,
+            post.id,
+
           trigger_type:
             triggerType,
+
           trigger_keywords:
             triggerKeywords,
+
           trigger_keyword:
             legacyKeyword,
-          dm_message: dmMessage,
-          reply_enabled: replyEnabled,
+
+          dm_message:
+            dmMessage,
+
+          /*
+           * PUBLIC COMMENT REPLY
+           */
+          reply_enabled:
+            replyEnabled,
+
           reply_text:
             replyEnabled && replyText
               ? replyText
               : null,
-          button_name: buttonName.trim() || null,
-          button_url: buttonUrl.trim() || null,
-          is_active: isActive,
+
+          /*
+           * DM BUTTON
+           */
+          button_name:
+            buttonName.trim() || null,
+
+          button_url:
+            buttonUrl.trim() || null,
+
+          /*
+           * AUTOMATION STATUS
+           */
+          is_active:
+            isActive,
         });
 
     if (insertError) {
+      console.error(
+        "CREATE AUTOMATION INSERT ERROR:",
+        insertError
+      );
+
       redirect(
         `/dashboard/automations/new?error=${encodeURIComponent(
           insertError.message
         )}`
       );
     }
+
+    console.log(
+      "INSTAGRAM AUTOMATION CREATED SUCCESSFULLY:",
+      {
+        postId: post.id,
+        replyEnabled,
+        replyText,
+      }
+    );
 
     redirect("/dashboard/automations");
   }
@@ -536,7 +654,8 @@ export default async function NewAutomationPage({
 
                     <PostSelector
                       posts={posts}
-                    />                  </div>
+                    />
+                  </div>
                 )}
               </div>
 
@@ -648,31 +767,39 @@ https://example.com`}
                   className="w-full resize-y rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm leading-6 outline-none placeholder:text-white/20 focus:border-blue-500"
                 />
 
-
                 <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
                   <label className="flex items-center justify-between">
                     <div>
                       <p className="font-medium">
                         Reply to Comment
                       </p>
+
                       <p className="mt-1 text-xs text-white/40">
                         Public reply on Instagram comment
                       </p>
                     </div>
+
                     <input
                       type="checkbox"
                       name="reply_enabled"
+                      value="true"
                       className="h-5 w-5 accent-blue-600"
                     />
                   </label>
 
                   <div className="mt-5">
-                    <label className="mb-2 block text-sm font-medium">
+                    <label
+                      htmlFor="reply_text"
+                      className="mb-2 block text-sm font-medium"
+                    >
                       Reply Message
                     </label>
+
                     <textarea
+                      id="reply_text"
                       name="reply_text"
                       rows={4}
+                      maxLength={1000}
                       placeholder="Thanks for commenting ❤️"
                       className="w-full resize-y rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm leading-6 outline-none placeholder:text-white/20 focus:border-blue-500"
                     />
@@ -707,6 +834,7 @@ https://example.com`}
                     <input
                       id="button_url"
                       name="button_url"
+                      type="url"
                       placeholder="https://example.com"
                       className="w-full rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm outline-none placeholder:text-white/20 focus:border-blue-500"
                     />

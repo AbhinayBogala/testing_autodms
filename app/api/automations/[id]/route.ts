@@ -143,9 +143,15 @@ export async function GET(
      * Get the corresponding Instagram post.
      *
      * instagram_automations.instagram_post_id stores
-     * the Instagram MEDIA ID.
+     * the Supabase instagram_posts.id UUID.
+     *
+     * For backwards compatibility with older rows that may still
+     * contain an Instagram media ID, we first look up by UUID and
+     * then fall back to instagram_media_id.
      */
-    const { data: post } = await admin
+    let post = null;
+
+    const { data: postById } = await admin
       .from("instagram_posts")
       .select(
         `
@@ -165,10 +171,41 @@ export async function GET(
         account.id
       )
       .eq(
-        "instagram_media_id",
+        "id",
         automation.instagram_post_id
       )
       .maybeSingle();
+
+    post = postById;
+
+    if (!post && automation.instagram_post_id) {
+      const { data: postByMediaId } = await admin
+        .from("instagram_posts")
+        .select(
+          `
+          id,
+          instagram_media_id,
+          caption,
+          media_type,
+          media_url,
+          permalink,
+          published_at,
+          likes_count,
+          comments_count
+          `
+        )
+        .eq(
+          "instagram_account_id",
+          account.id
+        )
+        .eq(
+          "instagram_media_id",
+          automation.instagram_post_id
+        )
+        .maybeSingle();
+
+      post = postByMediaId;
+    }
 
     return NextResponse.json({
       data: {
@@ -177,7 +214,7 @@ export async function GET(
         post: post ?? null,
 
         postIds: post
-          ? [post.instagram_media_id]
+          ? [post.id]
           : automation.instagram_post_id
             ? [automation.instagram_post_id]
             : [],
@@ -577,7 +614,8 @@ export async function PATCH(
      * If postIds is supplied, we use the first valid
      * selected post.
      *
-     * We store instagram_media_id, NOT instagram_posts.id.
+     * We store instagram_posts.id (the Supabase UUID), NOT
+     * instagram_posts.instagram_media_id.
      * ---------------------------------------------------------
      */
     let instagramPostId =
@@ -692,9 +730,34 @@ export async function PATCH(
        */
       instagramPostId =
         String(
-          selectedPosts[0]
-            .instagram_media_id
+          selectedPosts[0].id
         );
+    }
+
+    /**
+     * ---------------------------------------------------------
+     * NORMALIZE LEGACY POST ID
+     * ---------------------------------------------------------
+     *
+     * Older automations may contain instagram_media_id in
+     * instagram_post_id. Convert it to the instagram_posts.id UUID
+     * when the matching post exists.
+     * ---------------------------------------------------------
+     */
+    if (
+      instagramPostId &&
+      !Array.isArray(body?.postIds)
+    ) {
+      const { data: legacyPost } = await admin
+        .from("instagram_posts")
+        .select("id")
+        .eq("instagram_account_id", account.id)
+        .eq("instagram_media_id", instagramPostId)
+        .maybeSingle();
+
+      if (legacyPost?.id) {
+        instagramPostId = legacyPost.id;
+      }
     }
 
     /**
