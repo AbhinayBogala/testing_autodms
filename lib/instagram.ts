@@ -138,6 +138,18 @@ export async function exchangeForLongLivedToken(
     );
   }
 
+  if (!shortLivedToken) {
+    throw new Error(
+      "Instagram short-lived access token is missing"
+    );
+  }
+
+  /*
+   * Instagram's long-lived token exchange
+   * endpoint expects the parameters as
+   * query parameters and the request is GET.
+   */
+
   const url = new URL(
     `${INSTAGRAM_GRAPH_BASE}/access_token`
   );
@@ -163,7 +175,7 @@ export async function exchangeForLongLivedToken(
       endpoint:
         url.origin +
         url.pathname,
-      method: "POST",
+      method: "GET",
     }
   );
 
@@ -171,7 +183,7 @@ export async function exchangeForLongLivedToken(
     await fetch(
       url.toString(),
       {
-        method: "POST",
+        method: "GET",
         cache: "no-store",
       }
     );
@@ -495,12 +507,12 @@ export async function refreshAccountIfNeeded(
               expiresAt -
               now
             ) /
-              (
-                24 *
-                60 *
-                60 *
-                1000
-              )
+            (
+              24 *
+              60 *
+              60 *
+              1000
+            )
           )
         ),
     }
