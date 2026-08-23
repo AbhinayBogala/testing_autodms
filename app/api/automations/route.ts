@@ -167,7 +167,7 @@ export async function GET() {
  * IMPORTANT:
  *
  * instagram_automations.instagram_post_id stores the
- * Instagram MEDIA ID.
+ * Supabase instagram_posts.id UUID.
  *
  * Example:
  *
@@ -179,15 +179,19 @@ export async function GET() {
  *
  * We store:
  *
- *   instagram_post_id = 17943238854072307
+ *   instagram_post_id = a672a5d8-db1c-4391-ace6-69366062b1d7
  *
- * This matches the Instagram webhook:
+ * The Instagram webhook receives:
  *
  *   value.media.id
  *
- * which is also:
+ * which is:
  *
  *   17943238854072307
+ *
+ * The webhook first finds instagram_posts using
+ * instagram_media_id and then uses the resulting
+ * instagram_posts.id to find this automation.
  */
 export async function POST(
   request: NextRequest
@@ -264,8 +268,7 @@ export async function POST(
      *
      * 2. instagram_posts.instagram_media_id
      *
-     * We normalize both into Instagram media IDs
-     * before creating the automation.
+     * We normalize both into instagram_posts rows.
      */
     const rawPostIds = Array.isArray(
       body?.postIds
@@ -523,6 +526,11 @@ export async function POST(
 
     /**
      * PUBLIC REPLY SETTINGS
+     *
+     * These values are stored directly in:
+     *
+     * instagram_automations.reply_enabled
+     * instagram_automations.reply_text
      */
     const replyEnabled =
       Boolean(
@@ -601,17 +609,14 @@ export async function POST(
           /**
            * IMPORTANT:
            *
-           * Store Instagram MEDIA ID.
+           * Store the Supabase instagram_posts.id UUID.
            *
-           * This is the value received by the
-           * Instagram webhook:
-           *
-           * value.media.id
+           * The Instagram webhook receives the Instagram
+           * media ID, finds the corresponding instagram_posts
+           * row, and then uses post.id to find this automation.
            */
           instagram_post_id:
-            String(
-              post.instagram_media_id
-            ),
+            post.id,
 
           trigger_type:
             triggerType,
@@ -712,6 +717,18 @@ export async function POST(
             (automation) =>
               automation.instagram_post_id
           ),
+
+        replyEnabled:
+          replyEnabled,
+
+        replyText:
+          replyText,
+
+        dmEnabled:
+          dmEnabled,
+
+        dmMessage:
+          dmMessage,
       }
     );
 
