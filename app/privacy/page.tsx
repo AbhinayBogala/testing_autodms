@@ -17,7 +17,7 @@ export default function PrivacyPolicy() {
                 1. Introduction
               </h2>
               <p>
-                Auto DM MVP is an Instagram automation application that helps
+                DevilX MVP is an Instagram automation application that helps
                 Instagram professional accounts manage comments and automate
                 responses. This Privacy Policy explains how information is
                 handled when you use our application.

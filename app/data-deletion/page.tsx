@@ -18,7 +18,7 @@ export default function DataDeletion() {
               </h2>
   
               <p>
-                If you would like your information associated with Auto DM MVP
+                If you would like your information associated with DevilX MVP
                 to be deleted, you can request deletion by contacting us at:
               </p>
   

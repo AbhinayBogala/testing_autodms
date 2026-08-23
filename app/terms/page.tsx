@@ -16,7 +16,7 @@ export default function TermsOfService() {
                 1. Acceptance of Terms
               </h2>
               <p>
-                By accessing or using Auto DM MVP, you agree to these Terms of
+                By accessing or using DevilX MVP, you agree to these Terms of
                 Service. If you do not agree with these terms, please do not
                 use the application.
               </p>
@@ -27,7 +27,7 @@ export default function TermsOfService() {
                 2. Description of the Service
               </h2>
               <p>
-                Auto DM MVP provides tools for Instagram professional accounts
+                DevilX MVP provides tools for Instagram professional accounts
                 to manage comments, automate responses, manage messages, and
                 view engagement information.
               </p>

@@ -53,6 +53,7 @@ export default async function DashboardLayout({
    * Fetch all accounts and then select the account
    * that is currently marked as connected.
    */
+
   const {
     data: accounts,
     error: accountError,
@@ -80,6 +81,7 @@ export default async function DashboardLayout({
    * The active Instagram account is the account
    * whose is_connected value is true.
    */
+
   const account =
     accounts?.find(
       (item) => item.is_connected === true
@@ -90,72 +92,132 @@ export default async function DashboardLayout({
   );
 
   return (
-    <div
-      className="
-        min-h-screen
-        bg-[#050505]
-        text-white
-      "
-    >
-      {/* SIDEBAR */}
+    <div className="min-h-screen bg-[#050505] text-white">
+
+      {/* =========================================================
+          SIDEBAR
+      ========================================================= */}
+
       <aside
         className="
           fixed
           left-0
           top-0
           z-50
+          flex
           h-screen
           w-72
+          flex-col
           border-r
-          border-white/10
-          bg-[#080808]/90
-          backdrop-blur-xl
+          border-white/[0.07]
+          bg-[#080808]
           px-5
           py-6
         "
       >
-        {/* BRAND */}
-        <div>
-          <h1
-            className="
-              text-2xl
-              font-bold
-              tracking-tight
-            "
-          >
-            AUTO DM
-          </h1>
 
-          <p
-            className="
-              mt-1
-              text-xs
-              text-gray-500
-            "
-          >
-            Instagram Automation
-          </p>
+        {/* =======================================================
+            DEVILX BRAND
+        ======================================================= */}
+
+        <div className="px-2">
+
+          <div className="flex items-center">
+
+            <span
+              className="
+                text-[27px]
+                font-black
+                leading-none
+                tracking-[-0.07em]
+                text-white
+              "
+            >
+              Devil
+            </span>
+
+            <span
+              className="
+                text-[27px]
+                font-black
+                leading-none
+                tracking-[-0.07em]
+                text-[#ff1744]
+              "
+            >
+              X
+            </span>
+
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
+
+            <span className="h-px w-7 bg-[#ff1744]" />
+
+            <p
+              className="
+                text-[9px]
+                font-medium
+                uppercase
+                tracking-[0.2em]
+                text-gray-600
+              "
+            >
+              Instagram Automation
+            </p>
+
+          </div>
+
         </div>
 
-        {/* ACTIVE INSTAGRAM ACCOUNT */}
+        {/* =======================================================
+            ACCOUNT CARD
+        ======================================================= */}
+
         <div
           className="
-            mt-8
-            rounded-3xl
+            mt-9
+            rounded-[22px]
             border
-            border-white/10
-            bg-white/[0.04]
-            p-5
+            border-white/[0.07]
+            bg-[#0d0d0d]
+            p-4
           "
         >
-          <div
-            className="
-              flex
-              items-center
-              gap-3
-            "
-          >
+
+          {/* Account label */}
+
+          <div className="mb-4 flex items-center justify-between">
+
+            <p
+              className="
+                text-[9px]
+                font-semibold
+                uppercase
+                tracking-[0.16em]
+                text-gray-600
+              "
+            >
+              Connected Account
+            </p>
+
+            <span
+              className="
+                h-1.5
+                w-1.5
+                rounded-full
+                bg-[#ff1744]
+              "
+            />
+
+          </div>
+
+          {/* Account */}
+
+          <div className="flex items-center gap-3">
+
             {account?.profile_picture_url ? (
+
               <img
                 src={account.profile_picture_url}
                 alt={
@@ -169,29 +231,42 @@ export default async function DashboardLayout({
                   w-12
                   rounded-full
                   object-cover
+                  ring-2
+                  ring-white/[0.06]
                 "
               />
+
             ) : (
+
               <div
                 className="
                   flex
                   h-12
                   w-12
+                  shrink-0
                   items-center
                   justify-center
                   rounded-full
-                  bg-white/10
+                  border
+                  border-white/[0.07]
+                  bg-white/[0.04]
+                  text-lg
+                  text-gray-500
                 "
               >
                 ◎
               </div>
+
             )}
 
             <div className="min-w-0">
+
               <p
                 className="
                   truncate
+                  text-sm
                   font-semibold
+                  text-white
                 "
               >
                 {account?.username
@@ -199,106 +274,261 @@ export default async function DashboardLayout({
                   : "@Instagram"}
               </p>
 
-              <p
-                className={
-                  connected
-                    ? "text-xs text-green-400"
-                    : "text-xs text-red-400"
-                }
-              >
-                ●{" "}
-                {connected
-                  ? "Connected"
-                  : "Disconnected"}
-              </p>
+              <div className="mt-1 flex items-center gap-1.5">
+
+                <span
+                  className={
+                    connected
+                      ? "h-1.5 w-1.5 rounded-full bg-emerald-400"
+                      : "h-1.5 w-1.5 rounded-full bg-red-400"
+                  }
+                />
+
+                <p
+                  className={
+                    connected
+                      ? "text-[11px] text-emerald-400"
+                      : "text-[11px] text-red-400"
+                  }
+                >
+                  {connected
+                    ? "Connected"
+                    : "Disconnected"}
+                </p>
+
+              </div>
+
             </div>
+
           </div>
 
+          {/* Connect */}
+
           {!connected && (
-            <div className="mt-5">
+            <div className="mt-4">
+
               <ConnectInstagramButton
                 label="Connect Instagram"
               />
+
             </div>
           )}
+
         </div>
 
-        {/* NAVIGATION */}
-        <nav
-          className="
-            mt-8
-            space-y-2
-          "
-        >
-          {navigation.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className="
-                group
-                flex
-                items-center
-                gap-3
-                rounded-xl
-                px-4
-                py-3
-                text-sm
-                text-gray-400
-                transition
-                hover:bg-white/[0.06]
-                hover:text-white
-              "
-            >
-              <span
+        {/* =======================================================
+            NAVIGATION
+        ======================================================= */}
+
+        <div className="mt-9">
+
+          <p
+            className="
+              mb-3
+              px-3
+              text-[9px]
+              font-semibold
+              uppercase
+              tracking-[0.18em]
+              text-gray-700
+            "
+          >
+            Workspace
+          </p>
+
+          <nav className="space-y-1">
+
+            {navigation.map((item) => (
+
+              <a
+                key={item.href}
+                href={item.href}
                 className="
-                  text-lg
-                  transition
-                  group-hover:scale-110
+                  group
+                  relative
+                  flex
+                  items-center
+                  gap-3
+                  rounded-xl
+                  border
+                  border-transparent
+                  px-3.5
+                  py-3
+                  text-sm
+                  text-gray-500
+                  transition-colors
+                  duration-200
+                  hover:border-white/[0.05]
+                  hover:bg-white/[0.035]
+                  hover:text-white
                 "
               >
-                {item.icon}
-              </span>
 
-              {item.name}
-            </a>
-          ))}
-        </nav>
+                {/* Left indicator */}
 
-        {/* FOOTER */}
+                <span
+                  className="
+                    absolute
+                    left-0
+                    top-1/2
+                    h-5
+                    w-0.5
+                    -translate-y-1/2
+                    rounded-full
+                    bg-[#ff1744]
+                    opacity-0
+                    transition-opacity
+                    duration-200
+                    group-hover:opacity-100
+                  "
+                />
+
+                {/* Icon */}
+
+                <span
+                  className="
+                    flex
+                    h-8
+                    w-8
+                    items-center
+                    justify-center
+                    rounded-lg
+                    border
+                    border-white/[0.05]
+                    bg-white/[0.025]
+                    text-sm
+                    text-gray-500
+                    transition-colors
+                    duration-200
+                    group-hover:border-[#ff1744]/15
+                    group-hover:bg-[#ff1744]/[0.05]
+                    group-hover:text-[#ff1744]
+                  "
+                >
+                  {item.icon}
+                </span>
+
+                <span className="font-medium">
+                  {item.name}
+                </span>
+
+              </a>
+
+            ))}
+
+          </nav>
+
+        </div>
+
+        {/* =======================================================
+            SIDEBAR FOOTER
+        ======================================================= */}
+
         <div
           className="
-            absolute
-            bottom-6
-            left-5
-            right-5
+            mt-auto
             border-t
-            border-white/10
+            border-white/[0.06]
             pt-5
           "
         >
-          <p
-            className="
-              truncate
-              text-xs
-              text-gray-500
-            "
-          >
-            {user.email}
-          </p>
+
+          <div className="flex items-center gap-3">
+
+            <div
+              className="
+                flex
+                h-9
+                w-9
+                shrink-0
+                items-center
+                justify-center
+                rounded-xl
+                bg-white/[0.04]
+                text-xs
+                font-semibold
+                text-gray-400
+              "
+            >
+              {user.email?.charAt(0).toUpperCase() ?? "U"}
+            </div>
+
+            <div className="min-w-0">
+
+              <p
+                className="
+                  text-[9px]
+                  font-semibold
+                  uppercase
+                  tracking-[0.15em]
+                  text-gray-700
+                "
+              >
+                Account
+              </p>
+
+              <p
+                className="
+                  mt-1
+                  truncate
+                  text-xs
+                  text-gray-500
+                "
+              >
+                {user.email}
+              </p>
+
+            </div>
+
+          </div>
+
+          <div className="mt-4 flex items-center justify-between">
+
+            <p
+              className="
+                text-[9px]
+                uppercase
+                tracking-[0.15em]
+                text-gray-700
+              "
+            >
+              DevilX
+            </p>
+
+            <p
+              className="
+                text-[9px]
+                uppercase
+                tracking-[0.12em]
+                text-gray-700
+              "
+            >
+              v1.0
+            </p>
+
+          </div>
+
         </div>
+
       </aside>
 
-      {/* PAGE CONTENT */}
+      {/* =========================================================
+          MAIN CONTENT
+      ========================================================= */}
+
       <main
         className="
           ml-72
           min-h-screen
+          bg-[#050505]
           px-8
           py-8
+          lg:px-10
         "
       >
         {children}
       </main>
+
     </div>
   );
 }

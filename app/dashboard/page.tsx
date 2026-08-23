@@ -217,55 +217,36 @@ export default async function DashboardPage() {
   // ============================================================
 
   return (
-    <div className="px-10 py-10">
-
+    <div className="min-h-screen bg-[#050505] text-white">
       {/* ======================================================
           HEADER
       ====================================================== */}
 
-      <div className="flex items-start justify-between">
-
+      <div className="flex flex-col gap-6 border-b border-white/[0.06] pb-8 xl:flex-row xl:items-start xl:justify-between">
         <div>
+          <div className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#ff1744]" />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">
+              DevilX / Overview
+            </p>
+          </div>
 
-          <p className="text-sm text-gray-500">
-            Overview
-          </p>
-
-          <h1 className="mt-2 text-4xl font-bold">
+          <h1 className="mt-3 text-4xl font-bold tracking-[-0.04em] text-white">
             Dashboard
           </h1>
 
-          <p className="mt-2 text-gray-400">
+          <p className="mt-2 text-sm text-gray-500">
             Manage Instagram content, DMs and automations.
           </p>
-
         </div>
 
-        {/* ====================================================
-            HEADER ACTIONS
-        ==================================================== */}
-
-        <div className="flex items-center gap-3">
-
-          {/* Existing account controls */}
-
+        <div className="flex flex-wrap items-center gap-3">
           {account?.is_connected && (
             <>
               <SyncInstagramButton />
-
               <DisconnectInstagramButton />
             </>
           )}
-
-          {/* ==================================================
-              CONNECT / ADD INSTAGRAM ACCOUNT
-
-              If there is already a connected account,
-              this button becomes "Add Instagram Account".
-
-              If there is no connected account, it remains
-              "Connect Instagram".
-          ================================================== */}
 
           <ConnectInstagramButton
             label={
@@ -274,9 +255,7 @@ export default async function DashboardPage() {
                 : "Connect Instagram"
             }
           />
-
         </div>
-
       </div>
 
       {/* ======================================================
@@ -284,282 +263,162 @@ export default async function DashboardPage() {
       ====================================================== */}
 
       {!account?.is_connected ? (
-
-        <div
-          className="
-            mt-20
-            mx-auto
-            max-w-xl
-            rounded-3xl
-            border
-            border-white/10
-            bg-white/[0.04]
-            p-12
-            text-center
-          "
-        >
-
-          <div className="text-5xl">
-            ✨
+        <div className="mx-auto mt-20 max-w-xl rounded-[28px] border border-white/[0.08] bg-[#0b0b0b] p-12 text-center shadow-2xl shadow-black/30">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[#ff1744]/15 bg-[#ff1744]/[0.06] text-2xl text-[#ff1744]">
+            ◎
           </div>
 
-          <h2 className="mt-6 text-3xl font-bold">
+          <h2 className="mt-7 text-3xl font-bold tracking-tight">
             Connect your Instagram
           </h2>
 
-          <p className="mt-4 text-gray-400">
+          <p className="mt-4 text-sm leading-6 text-gray-500">
             Connect your professional account to start managing comments,
             DMs and automations.
           </p>
 
           <div className="mt-8">
-
-            <ConnectInstagramButton
-              label="Connect Instagram"
-            />
-
+            <ConnectInstagramButton label="Connect Instagram" />
           </div>
-
         </div>
-
       ) : (
-
         <>
-
           {/* ==================================================
               ALL INSTAGRAM ACCOUNTS
-
-              This appears only when more than one account
-              exists in Supabase.
-
-              The page does NOT delete old accounts.
           ================================================== */}
 
           {accounts.length > 1 && (
+            <section className="mt-9">
+              <div className="mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="h-1 w-1 rounded-full bg-[#ff1744]" />
+                  <h2 className="text-lg font-semibold">
+                    Instagram Accounts
+                  </h2>
+                </div>
 
-            <section className="mt-8">
-
-              <h2 className="text-xl font-bold">
-                Instagram Accounts
-              </h2>
-
-              <p className="mt-2 text-sm text-gray-500">
-                Instagram accounts connected to your workspace.
-              </p>
-
-              <div className="mt-4 space-y-3">
-
-                {accounts.map(
-                  (instagramAccount) => (
-
-                    <div
-                      key={
-                        instagramAccount.id
-                      }
-                      className="
-                        flex
-                        items-center
-                        justify-between
-                        rounded-2xl
-                        border
-                        border-white/10
-                        bg-white/[0.03]
-                        p-4
-                      "
-                    >
-
-                      <div className="flex items-center gap-3">
-
-                        {instagramAccount.profile_picture_url ? (
-
-                          <img
-                            src={
-                              instagramAccount.profile_picture_url
-                            }
-                            alt={
-                              instagramAccount.username
-                                ? `@${instagramAccount.username}`
-                                : "Instagram account"
-                            }
-                            className="
-                              h-10
-                              w-10
-                              rounded-full
-                              object-cover
-                            "
-                          />
-
-                        ) : (
-
-                          <div
-                            className="
-                              flex
-                              h-10
-                              w-10
-                              items-center
-                              justify-center
-                              rounded-full
-                              bg-white/10
-                            "
-                          >
-                            📸
-                          </div>
-
-                        )}
-
-                        <div>
-
-                          <p className="font-medium">
-                            {instagramAccount.username
-                              ? `@${instagramAccount.username}`
-                              : "Instagram Account"}
-                          </p>
-
-                          <p className="text-xs text-gray-500">
-                            {instagramAccount.is_connected
-                              ? "Currently connected"
-                              : "Saved account"}
-                          </p>
-
-                        </div>
-
-                      </div>
-
-                      {instagramAccount.is_connected ? (
-
-                        <span
-                          className="
-                            rounded-full
-                            bg-green-500/10
-                            px-3
-                            py-1
-                            text-xs
-                            text-green-400
-                          "
-                        >
-                          Active
-                        </span>
-
-                      ) : (
-
-                        <span
-                          className="
-                            rounded-full
-                            bg-white/10
-                            px-3
-                            py-1
-                            text-xs
-                            text-white/40
-                          "
-                        >
-                          Inactive
-                        </span>
-
-                      )}
-
-                    </div>
-
-                  )
-                )}
-
+                <p className="mt-1 text-xs text-gray-600">
+                  Instagram accounts connected to your workspace.
+                </p>
               </div>
 
-            </section>
+              <div className="space-y-3">
+                {accounts.map((instagramAccount) => (
+                  <div
+                    key={instagramAccount.id}
+                    className="flex items-center justify-between rounded-2xl border border-white/[0.07] bg-[#0b0b0b] p-4 transition-colors duration-200 hover:border-white/[0.12] hover:bg-[#0d0d0d]"
+                  >
+                    <div className="flex items-center gap-4">
+                      {instagramAccount.profile_picture_url ? (
+                        <img
+                          src={instagramAccount.profile_picture_url}
+                          alt={
+                            instagramAccount.username
+                              ? `@${instagramAccount.username}`
+                              : "Instagram account"
+                          }
+                          className="h-11 w-11 rounded-full object-cover ring-2 ring-white/[0.06]"
+                        />
+                      ) : (
+                        <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.07] bg-white/[0.04] text-gray-500">
+                          ◎
+                        </div>
+                      )}
 
+                      <div>
+                        <p className="font-medium text-white">
+                          {instagramAccount.username
+                            ? `@${instagramAccount.username}`
+                            : "Instagram Account"}
+                        </p>
+
+                        <p className="mt-1 text-xs text-gray-600">
+                          {instagramAccount.is_connected
+                            ? "Currently connected"
+                            : "Saved account"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {instagramAccount.is_connected ? (
+                      <span className="flex items-center gap-2 rounded-full border border-emerald-500/10 bg-emerald-500/[0.06] px-3 py-1.5 text-[11px] font-medium text-emerald-400">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                        Active
+                      </span>
+                    ) : (
+                      <span className="rounded-full border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-[11px] text-gray-600">
+                        Inactive
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
 
           {/* ==================================================
               STATS
           ================================================== */}
 
-          <div
-            className="
-              mt-10
-              grid
-              gap-5
-              md:grid-cols-2
-              lg:grid-cols-4
-            "
-          >
-
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               label="Followers"
-              value={
-                formatNumber(
-                  account.followers_count
-                )
-              }
+              value={formatNumber(account.followers_count)}
             />
 
             <StatCard
               label="Posts"
-              value={
-                String(
-                  postsCount
-                )
-              }
+              value={String(postsCount)}
             />
 
             <StatCard
               label="Following"
-              value={
-                formatNumber(
-                  account.following_count
-                )
-              }
+              value={formatNumber(account.following_count)}
             />
 
             <StatCard
               label="Active Automations"
-              value={
-                String(
-                  activeAutomations
-                )
-              }
+              value={String(activeAutomations)}
             />
-
           </div>
 
           {/* ==================================================
               TOKEN
           ================================================== */}
 
-          <div
-            className="
-              mt-8
-              rounded-3xl
-              border
-              border-white/10
-              bg-white/[0.04]
-              p-6
-            "
-          >
+          <div className="mt-6 rounded-[24px] border border-white/[0.07] bg-[#0b0b0b] p-6">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ff1744]/[0.07] text-xs text-[#ff1744]">
+                    ◉
+                  </span>
 
-            <p className="text-sm text-gray-500">
-              Instagram Token
-            </p>
+                  <p className="text-xs font-medium uppercase tracking-[0.15em] text-gray-600">
+                    Instagram Token
+                  </p>
+                </div>
 
-            <p className="mt-3 text-2xl font-bold">
+                <p className="mt-4 text-2xl font-bold tracking-tight">
+                  {account.token_expires_at
+                    ? new Date(
+                        account.token_expires_at
+                      ).toLocaleDateString("en-IN", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })
+                    : "Managed automatically"}
+                </p>
+              </div>
 
-              {account.token_expires_at
-                ? new Date(
-                    account.token_expires_at
-                  ).toLocaleDateString(
-                    "en-IN",
-                    {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    }
-                  )
-                : "Managed automatically"}
-
-            </p>
-
-            <p className="mt-2 text-sm text-green-400">
-              ● Long-lived token active
-            </p>
-
+              <div className="flex items-center gap-2 self-start rounded-full border border-emerald-500/10 bg-emerald-500/[0.06] px-3 py-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span className="text-xs text-emerald-400">
+                  Long-lived token active
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* ==================================================
@@ -567,52 +426,45 @@ export default async function DashboardPage() {
           ================================================== */}
 
           <section className="mt-10">
+            <div className="mb-5 flex items-end justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="h-1 w-1 rounded-full bg-[#ff1744]" />
+                  <h2 className="text-xl font-semibold tracking-tight">
+                    Recent Posts
+                  </h2>
+                </div>
 
-            <h2 className="text-2xl font-bold">
-              Recent Posts
-            </h2>
-
-            <p className="mt-2 text-gray-500">
-              Click a post to view media and description.
-            </p>
-
-            {posts.length === 0 ? (
-
-              <div
-                className="
-                  mt-6
-                  rounded-2xl
-                  border
-                  border-white/10
-                  bg-white/[0.03]
-                  p-10
-                  text-center
-                  text-gray-400
-                "
-              >
-
-                No posts synced yet.
-
-                <br />
-
-                Click Sync Instagram.
-
+                <p className="mt-1 text-xs text-gray-600">
+                  Click a post to view media and description.
+                </p>
               </div>
 
+              <span className="hidden text-xs text-gray-600 sm:block">
+                {postsCount} total
+              </span>
+            </div>
+
+            {posts.length === 0 ? (
+              <div className="rounded-[24px] border border-white/[0.07] bg-[#0b0b0b] p-12 text-center">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.03] text-gray-500">
+                  ▣
+                </div>
+
+                <p className="mt-5 text-sm font-medium text-gray-300">
+                  No posts synced yet.
+                </p>
+
+                <p className="mt-1 text-xs text-gray-600">
+                  Click Sync Instagram to load your latest posts.
+                </p>
+              </div>
             ) : (
-
-              <PostsGrid
-                posts={posts}
-              />
-
+              <PostsGrid posts={posts} />
             )}
-
           </section>
-
         </>
-
       )}
-
     </div>
   );
 }
@@ -628,29 +480,26 @@ function StatCard({
   label: string;
   value: string;
 }) {
-
   return (
+    <div className="group rounded-[22px] border border-white/[0.07] bg-[#0b0b0b] p-6 transition-colors duration-200 hover:border-[#ff1744]/20">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-600">
+          {label}
+        </p>
 
-    <div
-      className="
-        rounded-2xl
-        border
-        border-white/10
-        bg-white/[0.04]
-        p-6
-      "
-    >
+        <span className="h-1.5 w-1.5 rounded-full bg-[#ff1744]" />
+      </div>
 
-      <p className="text-sm text-gray-500">
-        {label}
-      </p>
-
-      <p className="mt-3 text-3xl font-bold">
+      <p className="mt-5 text-3xl font-bold tracking-[-0.03em] text-white">
         {value}
       </p>
 
-    </div>
+      <div className="mt-5 h-px w-full bg-white/[0.05]" />
 
+      <p className="mt-3 text-[10px] uppercase tracking-[0.12em] text-gray-700">
+        DevilX Analytics
+      </p>
+    </div>
   );
 }
 

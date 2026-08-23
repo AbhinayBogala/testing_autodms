@@ -36,7 +36,7 @@ export default async function NewAutomationPage({
 
   if (authError) {
     return (
-      <main className="min-h-screen bg-[#05070d] p-10 text-white">
+      <main className="min-h-screen bg-[#050505] p-10 text-white">
         <div className="mx-auto max-w-3xl">
           <h1 className="text-2xl font-bold">
             Authentication Error
@@ -524,12 +524,12 @@ export default async function NewAutomationPage({
     : null;
 
   return (
-    <main className="min-h-screen bg-[#05070d] text-white">
-      <header className="border-b border-white/10">
+    <main className="min-h-screen bg-[#050505] text-white">
+      <header className="border-b border-white/[0.07]">
         <div className="mx-auto max-w-5xl px-6 py-6">
           <Link
             href="/dashboard/automations"
-            className="text-sm text-white/40 transition hover:text-white"
+            className="text-sm text-gray-500 transition hover:text-white"
           >
             ← Back to Automations
           </Link>
@@ -538,7 +538,7 @@ export default async function NewAutomationPage({
             New Automation
           </h1>
 
-          <p className="mt-1 text-sm text-white/40">
+          <p className="mt-1 text-sm text-gray-500">
             Create an Instagram comment-to-DM automation.
           </p>
         </div>
@@ -577,7 +577,7 @@ export default async function NewAutomationPage({
 
             <Link
               href="/dashboard"
-              className="mt-6 inline-flex rounded-xl border border-white/10 bg-white/[0.05] px-6 py-3 text-sm font-semibold transition hover:bg-white/[0.1]"
+              className="mt-6 inline-flex rounded-xl border border-white/[0.07] bg-white/[0.05] px-6 py-3 text-sm font-semibold transition hover:bg-white/[0.1]"
             >
               Back to Dashboard
             </Link>
@@ -615,14 +615,14 @@ export default async function NewAutomationPage({
 
             <form
               action={createAutomation}
-              className="rounded-3xl border border-white/10 bg-white/[0.03] p-8"
+              className="rounded-3xl border border-white/[0.07] bg-[#0b0b0b] p-8"
             >
               <div>
                 <h2 className="text-lg font-semibold">
                   1. Select Instagram Post
                 </h2>
 
-                <p className="mt-2 text-sm text-white/40">
+                <p className="mt-2 text-sm text-gray-500">
                   Choose the post where comments should trigger the automation.
                 </p>
 
@@ -638,7 +638,7 @@ export default async function NewAutomationPage({
 
                     <Link
                       href="/dashboard"
-                      className="mt-4 inline-flex rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold hover:bg-blue-500"
+                      className="mt-4 inline-flex rounded-xl bg-[#ff1744] px-5 py-3 text-sm font-semibold hover:bg-[#e9143d]"
                     >
                       Go to Dashboard
                     </Link>
@@ -666,18 +666,18 @@ export default async function NewAutomationPage({
                   2. Trigger
                 </h2>
 
-                <p className="mt-2 text-sm text-white/40">
+                <p className="mt-2 text-sm text-gray-500">
                   Choose what should cause the DM to be sent.
                 </p>
 
                 <div className="mt-5 space-y-3">
-                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/[0.04]">
+                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 transition hover:bg-white/[0.04]">
                     <input
                       type="radio"
                       name="trigger_type"
                       value="keywords"
                       defaultChecked
-                      className="mt-1 h-4 w-4 accent-blue-600"
+                      className="mt-1 h-4 w-4 accent-[#ff1744]"
                     />
 
                     <div>
@@ -685,18 +685,18 @@ export default async function NewAutomationPage({
                         Specific keywords
                       </p>
 
-                      <p className="mt-1 text-xs text-white/40">
+                      <p className="mt-1 text-xs text-gray-500">
                         Send the DM when a comment contains any of your keywords.
                       </p>
                     </div>
                   </label>
 
-                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/[0.04]">
+                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 transition hover:bg-white/[0.04]">
                     <input
                       type="radio"
                       name="trigger_type"
                       value="any_comment"
-                      className="mt-1 h-4 w-4 accent-purple-600"
+                      className="mt-1 h-4 w-4 accent-[#ff1744]"
                     />
 
                     <div>
@@ -704,7 +704,7 @@ export default async function NewAutomationPage({
                         Any comment
                       </p>
 
-                      <p className="mt-1 text-xs text-white/40">
+                      <p className="mt-1 text-xs text-gray-500">
                         Send the DM for every comment on this post.
                       </p>
                     </div>
@@ -726,10 +726,10 @@ export default async function NewAutomationPage({
                   placeholder={
                     "link, price, details"
                   }
-                  className="w-full resize-y rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm leading-6 outline-none placeholder:text-white/20 focus:border-blue-500"
+                  className="w-full resize-y rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm leading-6 outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
                 />
 
-                <p className="mt-2 text-xs text-white/30">
+                <p className="mt-2 text-xs text-gray-600">
                   Separate keywords with commas or put each keyword on a new line.
                 </p>
               </div>
@@ -741,7 +741,7 @@ export default async function NewAutomationPage({
                   3. DM Message
                 </h2>
 
-                <p className="mt-2 text-sm text-white/40">
+                <p className="mt-2 text-sm text-gray-500">
                   This message will be sent when the trigger matches.
                 </p>
 
@@ -764,17 +764,17 @@ Thanks for commenting!
 
 Here's the link:
 https://example.com`}
-                  className="w-full resize-y rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm leading-6 outline-none placeholder:text-white/20 focus:border-blue-500"
+                  className="w-full resize-y rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm leading-6 outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
                 />
 
-                <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
+                <div className="mt-6 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
                   <label className="flex items-center justify-between">
                     <div>
                       <p className="font-medium">
                         Reply to Comment
                       </p>
 
-                      <p className="mt-1 text-xs text-white/40">
+                      <p className="mt-1 text-xs text-gray-500">
                         Public reply on Instagram comment
                       </p>
                     </div>
@@ -783,7 +783,7 @@ https://example.com`}
                       type="checkbox"
                       name="reply_enabled"
                       value="true"
-                      className="h-5 w-5 accent-blue-600"
+                      className="h-5 w-5 accent-[#ff1744]"
                     />
                   </label>
 
@@ -801,7 +801,7 @@ https://example.com`}
                       rows={4}
                       maxLength={1000}
                       placeholder="Thanks for commenting ❤️"
-                      className="w-full resize-y rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm leading-6 outline-none placeholder:text-white/20 focus:border-blue-500"
+                      className="w-full resize-y rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm leading-6 outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
                     />
                   </div>
                 </div>
@@ -819,7 +819,7 @@ https://example.com`}
                       id="button_name"
                       name="button_name"
                       placeholder="Get Course"
-                      className="w-full rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm outline-none placeholder:text-white/20 focus:border-blue-500"
+                      className="w-full rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
                     />
                   </div>
 
@@ -836,7 +836,7 @@ https://example.com`}
                       name="button_url"
                       type="url"
                       placeholder="https://example.com"
-                      className="w-full rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm outline-none placeholder:text-white/20 focus:border-blue-500"
+                      className="w-full rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
                     />
                   </div>
                 </div>
@@ -849,13 +849,13 @@ https://example.com`}
                   4. Status
                 </h2>
 
-                <label className="mt-5 flex cursor-pointer items-center justify-between rounded-2xl border border-white/10 bg-black/20 p-5">
+                <label className="mt-5 flex cursor-pointer items-center justify-between rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
                   <div>
                     <p className="text-sm font-medium">
                       Activate automation
                     </p>
 
-                    <p className="mt-1 text-xs text-white/30">
+                    <p className="mt-1 text-xs text-gray-600">
                       Start processing matching comments immediately.
                     </p>
                   </div>
@@ -864,7 +864,7 @@ https://example.com`}
                     type="checkbox"
                     name="is_active"
                     defaultChecked
-                    className="h-5 w-5 accent-blue-600"
+                    className="h-5 w-5 accent-[#ff1744]"
                   />
                 </label>
               </div>
@@ -872,7 +872,7 @@ https://example.com`}
               <div className="mt-10 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <Link
                   href="/dashboard/automations"
-                  className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-6 py-3 text-sm font-medium text-white/60 hover:bg-white/[0.08] hover:text-white"
+                  className="inline-flex items-center justify-center rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-6 py-3 text-sm font-medium text-white/60 hover:bg-white/[0.08] hover:text-white"
                 >
                   Cancel
                 </Link>
@@ -880,7 +880,7 @@ https://example.com`}
                 <button
                   type="submit"
                   disabled={posts.length === 0}
-                  className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-xl bg-[#ff1744] px-6 py-3 text-sm font-semibold hover:bg-[#e9143d] disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Create Automation
                 </button>

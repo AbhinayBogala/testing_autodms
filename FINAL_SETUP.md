@@ -1,4 +1,4 @@
-# Auto DM - Final MVP Setup
+# DevilX - Final MVP Setup
 
 This version is wired as a single-account ManyChat-style Instagram automation MVP.
 

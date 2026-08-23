@@ -503,65 +503,75 @@ export default async function EditAutomationPage({
    */
 
   return (
-    <main className="min-h-screen bg-[#05070d] text-white">
-      <header className="border-b border-white/10">
-        <div className="mx-auto max-w-5xl px-6 py-6">
+    <main className="min-h-screen bg-[#050505] text-white">
+      <header className="border-b border-white/[0.06] bg-[#070707]">
+        <div className="mx-auto max-w-5xl px-6 py-7">
           <Link
             href="/dashboard/automations"
-            className="text-sm text-white/40 transition hover:text-white"
+            className="inline-flex items-center gap-2 text-xs font-medium text-gray-600 transition-colors hover:text-white"
           >
-            ← Back to Automations
+            <span className="text-base">←</span>
+            Back to Automations
           </Link>
 
-          <h1 className="mt-3 text-2xl font-bold">
+          <div className="mt-4 flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#ff1744]" />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-600">
+              DevilX / Automation Engine
+            </p>
+          </div>
+
+          <h1 className="mt-3 text-3xl font-bold tracking-[-0.04em]">
             Edit Automation
           </h1>
 
-          <p className="mt-1 text-sm text-white/40">
+          <p className="mt-2 text-sm text-gray-500">
             Update your Instagram comment-to-DM automation.
           </p>
         </div>
       </header>
 
-      <div className="mx-auto max-w-3xl px-6 py-10">
+      <div className="mx-auto max-w-3xl px-6 py-9">
         {accountError && (
-          <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 p-5">
+          <div className="mb-6 rounded-[22px] border border-red-500/15 bg-red-500/[0.05] p-5">
             <h2 className="font-semibold text-red-300">
               Instagram account error
             </h2>
-
-            <p className="mt-2 text-sm text-red-200/70">
+            <p className="mt-2 text-sm text-red-200/60">
               {accountError.message}
             </p>
           </div>
         )}
 
         {postsError && (
-          <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 p-5">
+          <div className="mb-6 rounded-[22px] border border-red-500/15 bg-red-500/[0.05] p-5">
             <h2 className="font-semibold text-red-300">
               Posts error
             </h2>
-
-            <p className="mt-2 text-sm text-red-200/70">
+            <p className="mt-2 text-sm text-red-200/60">
               {postsError}
             </p>
           </div>
         )}
 
         {!account ? (
-          <div className="rounded-3xl border border-yellow-500/20 bg-yellow-500/10 p-8">
-            <h2 className="text-xl font-semibold text-yellow-200">
+          <div className="rounded-[26px] border border-yellow-500/15 bg-yellow-500/[0.04] p-8">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-yellow-500/10 bg-yellow-500/[0.06] text-yellow-300">
+              !
+            </div>
+
+            <h2 className="mt-5 text-xl font-semibold text-yellow-100">
               Instagram account not available
             </h2>
 
-            <p className="mt-2 text-sm text-yellow-100/60">
-              The Instagram account connected to this
-              automation is no longer active.
+            <p className="mt-2 max-w-lg text-sm leading-6 text-yellow-100/50">
+              The Instagram account connected to this automation is no longer
+              active.
             </p>
 
             <Link
               href="/dashboard"
-              className="mt-6 inline-flex rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold hover:bg-blue-500"
+              className="mt-6 inline-flex rounded-xl bg-[#ff1744] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#e9143d]"
             >
               Go to Dashboard
             </Link>
@@ -569,117 +579,110 @@ export default async function EditAutomationPage({
         ) : (
           <form
             action={updateAutomation}
-            className="rounded-3xl border border-white/10 bg-white/[0.03] p-8"
+            className="rounded-[28px] border border-white/[0.07] bg-[#0a0a0a] p-6 shadow-2xl shadow-black/30 sm:p-8"
           >
             {/* ACCOUNT */}
 
-            <div className="mb-8 rounded-2xl border border-green-500/20 bg-green-500/10 p-5">
+            <div className="rounded-[22px] border border-emerald-500/10 bg-emerald-500/[0.045] p-5">
               <div className="flex items-center gap-3">
                 {account.profile_picture_url ? (
                   <img
-                    src={
-                      account.profile_picture_url
-                    }
+                    src={account.profile_picture_url}
                     alt=""
-                    className="h-10 w-10 rounded-full object-cover"
+                    className="h-11 w-11 rounded-full object-cover ring-2 ring-white/[0.06]"
                   />
                 ) : (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/20">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full border border-emerald-500/10 bg-emerald-500/[0.06] text-emerald-400">
                     ◎
                   </div>
                 )}
 
                 <div>
-                  <p className="text-xs uppercase tracking-wider text-green-300/60">
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-emerald-400/50">
                     Instagram Account
                   </p>
 
-                  <p className="mt-1 font-semibold text-green-100">
-                    @{account.username ||
-                      "Instagram account"}
+                  <p className="mt-1 font-semibold text-emerald-100">
+                    @{account.username || "Instagram account"}
                   </p>
+                </div>
+
+                <div className="ml-auto flex items-center gap-2 rounded-full border border-emerald-500/10 bg-emerald-500/[0.06] px-3 py-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  <span className="text-[10px] font-medium text-emerald-400">
+                    Connected
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* POST */}
 
-            <div>
-              <h2 className="text-lg font-semibold">
-                1. Instagram Post
-              </h2>
-
-              <p className="mt-2 text-sm text-white/40">
-                Select the post where this automation should run.
-              </p>
+            <div className="mt-9">
+              <SectionHeading
+                number="01"
+                title="Instagram Post"
+                description="Select the post where this automation should run."
+              />
 
               <PostSelector
                 posts={posts}
                 initialPost={
                   posts.find(
                     (post) =>
-                      post.id ===
-                      automationData.instagram_post_id
+                      post.id === automationData.instagram_post_id
                   ) ?? null
                 }
               />
             </div>
 
-            <div className="my-8 h-px bg-white/10" />
+            <Divider />
 
             {/* TRIGGER */}
 
             <div>
-              <h2 className="text-lg font-semibold">
-                2. Trigger
-              </h2>
-
-              <p className="mt-2 text-sm text-white/40">
-                Choose what should trigger the DM.
-              </p>
+              <SectionHeading
+                number="02"
+                title="Trigger"
+                description="Choose what should trigger the DM."
+              />
 
               <div className="mt-5 space-y-3">
-                <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+                <label className="group flex cursor-pointer items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 transition-colors hover:border-[#ff1744]/20 hover:bg-[#ff1744]/[0.02]">
                   <input
                     type="radio"
                     name="trigger_type"
                     value="keywords"
-                    defaultChecked={
-                      currentTriggerType ===
-                      "keywords"
-                    }
-                    className="mt-1 h-4 w-4 accent-blue-600"
+                    defaultChecked={currentTriggerType === "keywords"}
+                    className="mt-1 h-4 w-4 accent-[#ff1744]"
                   />
 
                   <div>
-                    <p className="font-medium">
+                    <p className="font-medium text-white">
                       Specific keywords
                     </p>
 
-                    <p className="mt-1 text-xs text-white/40">
+                    <p className="mt-1 text-xs leading-5 text-gray-600">
                       Trigger when a comment contains any configured keyword.
                     </p>
                   </div>
                 </label>
 
-                <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+                <label className="group flex cursor-pointer items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 transition-colors hover:border-[#ff1744]/20 hover:bg-[#ff1744]/[0.02]">
                   <input
                     type="radio"
                     name="trigger_type"
                     value="any_comment"
-                    defaultChecked={
-                      currentTriggerType ===
-                      "any_comment"
-                    }
-                    className="mt-1 h-4 w-4 accent-purple-600"
+                    defaultChecked={currentTriggerType === "any_comment"}
+                    className="mt-1 h-4 w-4 accent-[#ff1744]"
                   />
 
                   <div>
-                    <p className="font-medium">
+                    <p className="font-medium text-white">
                       Any comment
                     </p>
 
-                    <p className="mt-1 text-xs text-white/40">
+                    <p className="mt-1 text-xs leading-5 text-gray-600">
                       Trigger for every comment on the selected post.
                     </p>
                   </div>
@@ -688,7 +691,7 @@ export default async function EditAutomationPage({
 
               <label
                 htmlFor="trigger_keywords"
-                className="mt-6 mb-2 block text-sm font-medium"
+                className="mb-2 mt-6 block text-sm font-medium"
               >
                 Keywords
               </label>
@@ -698,54 +701,46 @@ export default async function EditAutomationPage({
                 name="trigger_keywords"
                 rows={4}
                 maxLength={1000}
-                defaultValue={
-                  currentKeywords.join(
-                    ", "
-                  )
-                }
+                defaultValue={currentKeywords.join(", ")}
                 placeholder="link, price, details"
-                className="w-full resize-y rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm leading-6 outline-none placeholder:text-white/20 focus:border-blue-500"
+                className="w-full resize-y rounded-xl border border-white/[0.08] bg-[#070707] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-700 focus:border-[#ff1744]/40"
               />
 
-              <p className="mt-2 text-xs text-white/30">
+              <p className="mt-2 text-xs text-gray-700">
                 Separate keywords with commas or new lines.
               </p>
             </div>
 
-            <div className="my-8 h-px bg-white/10" />
+            <Divider />
 
             {/* MESSAGE */}
 
             <div>
-              <h2 className="text-lg font-semibold">
-                3. DM Message
-              </h2>
-
-              <p className="mt-2 text-sm text-white/40">
-                This message will be sent when the trigger matches.
-              </p>
+              <SectionHeading
+                number="03"
+                title="DM Message"
+                description="This message will be sent when the trigger matches."
+              />
 
               <textarea
                 name="dm_message"
                 required
                 rows={7}
                 maxLength={2000}
-                defaultValue={
-                  automationData.dm_message
-                }
-                className="mt-5 w-full resize-y rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm leading-6 outline-none focus:border-blue-500"
+                defaultValue={automationData.dm_message}
+                className="mt-5 w-full resize-y rounded-xl border border-white/[0.08] bg-[#070707] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-700 focus:border-[#ff1744]/40"
               />
 
-              <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
+              {/* PUBLIC REPLY */}
 
-                <label className="flex items-center justify-between">
-
+              <div className="mt-6 rounded-[22px] border border-white/[0.07] bg-white/[0.02] p-5">
+                <label className="flex items-center justify-between gap-4">
                   <div>
                     <p className="font-medium">
                       Reply to Comment
                     </p>
 
-                    <p className="mt-1 text-xs text-white/40">
+                    <p className="mt-1 text-xs text-gray-600">
                       Public reply on Instagram comment
                     </p>
                   </div>
@@ -753,17 +748,12 @@ export default async function EditAutomationPage({
                   <input
                     type="checkbox"
                     name="reply_enabled"
-                    defaultChecked={
-                      automationData.reply_enabled ?? false
-                    }
-                    className="h-5 w-5 accent-blue-600"
+                    defaultChecked={automationData.reply_enabled ?? false}
+                    className="h-5 w-5 accent-[#ff1744]"
                   />
-
                 </label>
 
-
                 <div className="mt-5">
-
                   <label className="mb-2 block text-sm font-medium">
                     Reply Message
                   </label>
@@ -771,77 +761,88 @@ export default async function EditAutomationPage({
                   <textarea
                     name="reply_text"
                     rows={4}
-                    defaultValue={
-                      automationData.reply_text ?? ""
-                    }
+                    defaultValue={automationData.reply_text ?? ""}
                     placeholder="Thanks for commenting ❤️"
-                    className="w-full rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm outline-none focus:border-blue-500"
+                    className="w-full rounded-xl border border-white/[0.08] bg-[#070707] px-4 py-3 text-sm text-white outline-none placeholder:text-gray-700 focus:border-[#ff1744]/40"
                   />
-
                 </div>
-
               </div>
 
-              <div className="mt-6 space-y-4">
+              {/* CUSTOM BUTTON */}
 
-                <div>
-                  <label
-                    htmlFor="button_name"
-                    className="mb-2 block text-sm font-medium"
-                  >
-                    Custom Button Name
-                  </label>
+              <div className="mt-6 rounded-[22px] border border-white/[0.07] bg-white/[0.02] p-5">
+                <div className="mb-5 flex items-center gap-2">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ff1744]/[0.06] text-xs text-[#ff1744]">
+                    ↗
+                  </span>
 
-                  <input
-                    id="button_name"
-                    name="button_name"
-                    defaultValue={
-                      automationData.button_name ?? ""
-                    }
-                    placeholder="Get Course"
-                    className="w-full rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm outline-none focus:border-blue-500"
-                  />
+                  <div>
+                    <p className="text-sm font-medium">
+                      Custom DM Button
+                    </p>
+
+                    <p className="text-xs text-gray-600">
+                      Add an optional clickable button to the DM.
+                    </p>
+                  </div>
                 </div>
 
+                <div className="space-y-4">
+                  <div>
+                    <label
+                      htmlFor="button_name"
+                      className="mb-2 block text-sm font-medium"
+                    >
+                      Custom Button Name
+                    </label>
 
-                <div>
-                  <label
-                    htmlFor="button_url"
-                    className="mb-2 block text-sm font-medium"
-                  >
-                    Button URL
-                  </label>
+                    <input
+                      id="button_name"
+                      name="button_name"
+                      defaultValue={automationData.button_name ?? ""}
+                      placeholder="Get Course"
+                      className="w-full rounded-xl border border-white/[0.08] bg-[#070707] px-4 py-3 text-sm text-white outline-none placeholder:text-gray-700 focus:border-[#ff1744]/40"
+                    />
+                  </div>
 
-                  <input
-                    id="button_url"
-                    name="button_url"
-                    defaultValue={
-                      automationData.button_url ?? ""
-                    }
-                    placeholder="https://example.com"
-                    className="w-full rounded-xl border border-white/10 bg-[#0b0e16] px-4 py-3 text-sm outline-none focus:border-blue-500"
-                  />
+                  <div>
+                    <label
+                      htmlFor="button_url"
+                      className="mb-2 block text-sm font-medium"
+                    >
+                      Button URL
+                    </label>
+
+                    <input
+                      id="button_url"
+                      name="button_url"
+                      defaultValue={automationData.button_url ?? ""}
+                      placeholder="https://example.com"
+                      className="w-full rounded-xl border border-white/[0.08] bg-[#070707] px-4 py-3 text-sm text-white outline-none placeholder:text-gray-700 focus:border-[#ff1744]/40"
+                    />
+                  </div>
                 </div>
-
               </div>
             </div>
 
-            <div className="my-8 h-px bg-white/10" />
+            <Divider />
 
             {/* STATUS */}
 
             <div>
-              <h2 className="text-lg font-semibold">
-                4. Status
-              </h2>
+              <SectionHeading
+                number="04"
+                title="Status"
+                description="Control whether this automation is currently running."
+              />
 
-              <label className="mt-5 flex cursor-pointer items-center justify-between rounded-2xl border border-white/10 bg-black/20 p-5">
+              <label className="mt-5 flex cursor-pointer items-center justify-between gap-4 rounded-[22px] border border-white/[0.07] bg-white/[0.02] p-5 transition-colors hover:border-white/[0.11]">
                 <div>
                   <p className="text-sm font-medium">
                     Automation active
                   </p>
 
-                  <p className="mt-1 text-xs text-white/30">
+                  <p className="mt-1 text-xs text-gray-600">
                     Turn this off to temporarily stop the automation.
                   </p>
                 </div>
@@ -849,27 +850,25 @@ export default async function EditAutomationPage({
                 <input
                   type="checkbox"
                   name="is_active"
-                  defaultChecked={
-                    automationData.is_active
-                  }
-                  className="h-5 w-5 accent-blue-600"
+                  defaultChecked={automationData.is_active}
+                  className="h-5 w-5 accent-[#ff1744]"
                 />
               </label>
             </div>
 
             {/* ACTIONS */}
 
-            <div className="mt-10 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <div className="mt-10 flex flex-col-reverse gap-3 border-t border-white/[0.06] pt-6 sm:flex-row sm:justify-end">
               <Link
                 href="/dashboard/automations"
-                className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-6 py-3 text-sm font-medium text-white/60 hover:bg-white/[0.08] hover:text-white"
+                className="inline-flex items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.02] px-6 py-3 text-sm font-medium text-gray-500 transition-colors hover:bg-white/[0.05] hover:text-white"
               >
                 Cancel
               </Link>
 
               <button
                 type="submit"
-                className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold hover:bg-blue-500"
+                className="rounded-xl bg-[#ff1744] px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-[#ff1744]/10 transition-colors hover:bg-[#e9143d]"
               >
                 Save Changes
               </button>
@@ -878,5 +877,39 @@ export default async function EditAutomationPage({
         )}
       </div>
     </main>
+  );
+}
+
+function SectionHeading({
+  number,
+  title,
+  description,
+}: {
+  number: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-3">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#ff1744]/[0.06] text-[9px] font-bold text-[#ff1744]">
+          {number}
+        </span>
+
+        <h2 className="text-lg font-semibold">
+          {title}
+        </h2>
+      </div>
+
+      <p className="mt-2 text-sm text-gray-600">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+function Divider() {
+  return (
+    <div className="my-9 h-px bg-white/[0.06]" />
   );
 }

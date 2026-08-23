@@ -1,4 +1,4 @@
-# Auto DM — Instagram Automation MVP
+# DevilX — Instagram Automation MVP
 
 This project is a single-account Instagram automation MVP designed as the foundation for a ManyChat-style product.
 
@@ -89,7 +89,7 @@ npm run dev
 
 Then:
 
-1. Create/login to the Auto DM account.
+1. Create/login to the DevilX account.
 2. Connect Instagram.
 3. Confirm the account row in `instagram_accounts` has a new long-lived token and expiry.
 4. Click Sync Instagram.

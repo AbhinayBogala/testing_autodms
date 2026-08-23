@@ -3,7 +3,6 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 
 import AutomationLiveUpdates from "./AutomationLiveUpdates";
-
 import DeleteAutomationButton from "./DeleteAutomationButton";
 
 export const dynamic = "force-dynamic";
@@ -51,7 +50,7 @@ export default async function AutomationsPage() {
 
   if (!user) {
     return (
-      <main className="min-h-screen bg-[#05070d] text-white flex items-center justify-center">
+      <main className="flex min-h-screen items-center justify-center bg-[#050505] text-white">
         Authentication required
       </main>
     );
@@ -74,7 +73,9 @@ export default async function AutomationsPage() {
 
   const automations = automationData ?? [];
 
-  const ids = automations.map((item) => item.instagram_post_id);
+  const ids = automations.map(
+    (item) => item.instagram_post_id
+  );
 
   const { data: postData } = ids.length
     ? await supabase
@@ -90,191 +91,602 @@ export default async function AutomationsPage() {
 
   const posts = postData ?? [];
 
-  const list: Automation[] = automations.map((item) => ({
-    ...item,
-    post:
-      posts.find(
-        (post) => post.id === item.instagram_post_id
-      ) ?? null,
-  }));
+  const list: Automation[] = automations.map(
+    (item) => ({
+      ...item,
+      post:
+        posts.find(
+          (post) =>
+            post.id === item.instagram_post_id
+        ) ?? null,
+    })
+  );
 
-  const active = list.filter((item) => item.is_active).length;
+  const active = list.filter(
+    (item) => item.is_active
+  ).length;
 
   return (
-    <main className="min-h-screen bg-[#05070d] text-white">
+    <main className="min-h-screen bg-[#050505] text-white">
+
       <AutomationLiveUpdates />
 
-      <header className="border-b border-white/10">
-        <div className="mx-auto max-w-6xl px-6 py-6 flex justify-between items-center">
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
+
+      <header className="border-b border-white/[0.06] bg-[#070707]">
+
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-8 py-7">
 
           <div>
+
             <Link
               href="/dashboard"
-              className="text-sm text-white/40 hover:text-white"
+              className="
+                inline-flex
+                items-center
+                gap-2
+                text-xs
+                font-medium
+                text-gray-600
+                transition-colors
+                hover:text-white
+              "
             >
-              ← Dashboard
+              <span className="text-base">
+                ←
+              </span>
+
+              Dashboard
             </Link>
 
-            <h1 className="mt-2 text-3xl font-bold">
+            <div className="mt-4 flex items-center gap-2">
+
+              <span className="h-1.5 w-1.5 rounded-full bg-[#ff1744]" />
+
+              <p className="
+                text-[10px]
+                font-semibold
+                uppercase
+                tracking-[0.2em]
+                text-gray-600
+              ">
+                DevilX / Automation Engine
+              </p>
+
+            </div>
+
+            <h1 className="
+              mt-3
+              text-3xl
+              font-bold
+              tracking-[-0.04em]
+            ">
               Automations
             </h1>
 
-            <p className="mt-1 text-white/40">
+            <p className="
+              mt-2
+              text-sm
+              text-gray-500
+            ">
               Manage Instagram comment-to-DM automations.
             </p>
+
           </div>
+
+          {/* NEW AUTOMATION */}
 
           <Link
             href="/dashboard/automations/new"
             className="
-              group relative overflow-hidden
-              rounded-2xl
-              bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600
-              px-6 py-3.5
-              text-sm font-semibold
-              shadow-lg shadow-blue-500/20
-              transition-all duration-300
-              hover:scale-105
+              inline-flex
+              items-center
+              gap-2
+              rounded-xl
+              bg-[#ff1744]
+              px-5
+              py-3
+              text-sm
+              font-semibold
+              text-white
+              shadow-lg
+              shadow-[#ff1744]/10
+              transition-colors
+              hover:bg-[#e9143d]
             "
           >
-            <span className="relative flex items-center gap-2">
-              <span className="text-xl">+</span>
-              New Automation
+            <span className="text-lg leading-none">
+              +
             </span>
+
+            New Automation
           </Link>
 
         </div>
+
       </header>
 
+      {/* =====================================================
+          CONTENT
+      ===================================================== */}
 
-      <div className="mx-auto max-w-6xl px-6 py-10">
+      <div className="mx-auto max-w-7xl px-8 py-9">
 
-        <div className="mb-8 grid grid-cols-3 gap-4">
+        {/* ===================================================
+            STATS
+        =================================================== */}
 
-          <Stat title="Total" value={String(list.length)} />
+        <div className="
+          grid
+          gap-4
+          sm:grid-cols-3
+        ">
 
-          <Stat title="Active" value={String(active)} />
+          <Stat
+            title="Total Automations"
+            value={String(list.length)}
+            accent="default"
+          />
+
+          <Stat
+            title="Active"
+            value={String(active)}
+            accent="green"
+          />
 
           <Stat
             title="Inactive"
             value={String(list.length - active)}
+            accent="muted"
           />
 
         </div>
 
+        {/* ===================================================
+            AUTOMATION LIST
+        =================================================== */}
 
-        <div className="space-y-4">
+        <div className="mt-8">
 
-          {list.map((automation) => (
+          <div className="
+            mb-4
+            flex
+            items-center
+            justify-between
+          ">
 
-            <div
-              key={automation.id}
-              className="
-                flex items-center gap-5
-                rounded-2xl border border-white/10
-                bg-white/[0.03] p-5
-              "
-            >
+            <div>
 
-              <div className="h-24 w-24 overflow-hidden rounded-xl bg-black">
+              <div className="flex items-center gap-2">
 
-                {automation.post?.media_url ? (
+                <span className="
+                  h-1
+                  w-1
+                  rounded-full
+                  bg-[#ff1744]
+                " />
 
-                  automation.post.media_type === "VIDEO" ? (
-
-                    <video
-                      src={automation.post.media_url}
-                      className="h-full w-full object-cover"
-                      muted
-                      playsInline
-                    />
-
-                  ) : (
-
-                    <img
-                      src={automation.post.media_url}
-                      className="h-full w-full object-cover"
-                      alt="Instagram post"
-                    />
-
-                  )
-
-                ) : (
-
-                  <div className="flex h-full items-center justify-center">
-                    🎬
-                  </div>
-
-                )}
+                <h2 className="
+                  text-lg
+                  font-semibold
+                ">
+                  Your Automations
+                </h2>
 
               </div>
 
-
-              <div className="flex-1">
-
-                <div className="flex items-center gap-3">
-
-                  <h2 className="font-semibold">
-                    Comment → DM
-                  </h2>
-
-                  <span className={
-                    automation.is_active
-                      ? "rounded-full bg-green-500/20 px-3 py-1 text-xs text-green-400"
-                      : "rounded-full bg-white/10 px-3 py-1 text-xs text-white/40"
-                  }>
-                    {automation.is_active ? "ON" : "OFF"}
-                  </span>
-
-                </div>
-
-
-                <p className="mt-2 line-clamp-2 text-sm text-white/50">
-                  {automation.post?.caption || "No reel description"}
-                </p>
-
-
-                <p className="mt-2 text-xs text-white/30">
-                  {automation.dm_message}
-                </p>
-
-
-                {automation.button_name && automation.button_url && (
-                  <div className="mt-3 inline-flex rounded-lg bg-blue-500/10 px-3 py-1 text-xs text-blue-400">
-                    Button: {automation.button_name}
-                  </div>
-                )}
-
-              </div>
-
-
-              <Link
-                href={`/dashboard/automations/${automation.id}/edit`}
-                className="
-                  rounded-xl border border-white/10
-                  px-4 py-2 text-sm
-                  hover:bg-white/10
-                "
-              >
-                Edit
-              </Link>
-
-
-              <form action={deleteAutomation}>
-
-                <input
-                  type="hidden"
-                  name="automation_id"
-                  value={automation.id}
-                />
-
-                <DeleteAutomationButton />
-
-              </form>
+              <p className="
+                mt-1
+                text-xs
+                text-gray-600
+              ">
+                Comment triggers and automatic DM responses.
+              </p>
 
             </div>
 
-          ))}
+            <span className="
+              rounded-full
+              border
+              border-white/[0.06]
+              bg-white/[0.025]
+              px-3
+              py-1.5
+              text-[10px]
+              font-medium
+              text-gray-500
+            ">
+              {list.length} total
+            </span>
+
+          </div>
+
+          <div className="space-y-3">
+
+            {list.length === 0 ? (
+
+              /* EMPTY STATE */
+
+              <div className="
+                rounded-[24px]
+                border
+                border-white/[0.07]
+                bg-[#0b0b0b]
+                px-6
+                py-16
+                text-center
+              ">
+
+                <div className="
+                  mx-auto
+                  flex
+                  h-14
+                  w-14
+                  items-center
+                  justify-center
+                  rounded-2xl
+                  border
+                  border-[#ff1744]/10
+                  bg-[#ff1744]/[0.05]
+                  text-xl
+                  text-[#ff1744]
+                ">
+                  ⚡
+                </div>
+
+                <h3 className="
+                  mt-5
+                  text-lg
+                  font-semibold
+                ">
+                  No automations yet
+                </h3>
+
+                <p className="
+                  mx-auto
+                  mt-2
+                  max-w-sm
+                  text-sm
+                  leading-6
+                  text-gray-600
+                ">
+                  Create your first comment-to-DM automation
+                  to start automatically responding to Instagram
+                  comments.
+                </p>
+
+                <Link
+                  href="/dashboard/automations/new"
+                  className="
+                    mt-7
+                    inline-flex
+                    items-center
+                    gap-2
+                    rounded-xl
+                    bg-[#ff1744]
+                    px-5
+                    py-3
+                    text-sm
+                    font-semibold
+                    text-white
+                    transition-colors
+                    hover:bg-[#e9143d]
+                  "
+                >
+                  <span className="text-lg">
+                    +
+                  </span>
+
+                  Create Automation
+                </Link>
+
+              </div>
+
+            ) : (
+
+              list.map((automation) => (
+
+                <div
+                  key={automation.id}
+                  className="
+                    group
+                    rounded-[22px]
+                    border
+                    border-white/[0.07]
+                    bg-[#0b0b0b]
+                    p-5
+                    transition-colors
+                    duration-200
+                    hover:border-white/[0.12]
+                    hover:bg-[#0d0d0d]
+                  "
+                >
+
+                  <div className="
+                    flex
+                    flex-col
+                    gap-5
+                    xl:flex-row
+                    xl:items-center
+                  ">
+
+                    {/* =======================================
+                        POST PREVIEW
+                    ======================================= */}
+
+                    <div className="
+                      h-24
+                      w-24
+                      shrink-0
+                      overflow-hidden
+                      rounded-xl
+                      border
+                      border-white/[0.06]
+                      bg-black
+                    ">
+
+                      {automation.post?.media_url ? (
+
+                        automation.post.media_type === "VIDEO" ? (
+
+                          <video
+                            src={automation.post.media_url}
+                            className="
+                              h-full
+                              w-full
+                              object-cover
+                            "
+                            muted
+                            playsInline
+                          />
+
+                        ) : (
+
+                          <img
+                            src={automation.post.media_url}
+                            className="
+                              h-full
+                              w-full
+                              object-cover
+                            "
+                            alt="Instagram post"
+                          />
+
+                        )
+
+                      ) : (
+
+                        <div className="
+                          flex
+                          h-full
+                          items-center
+                          justify-center
+                          text-gray-600
+                        ">
+                          🎬
+                        </div>
+
+                      )}
+
+                    </div>
+
+                    {/* =======================================
+                        AUTOMATION INFO
+                    ======================================= */}
+
+                    <div className="min-w-0 flex-1">
+
+                      <div className="
+                        flex
+                        flex-wrap
+                        items-center
+                        gap-3
+                      ">
+
+                        <div className="flex items-center gap-2">
+
+                          <span className="
+                            flex
+                            h-7
+                            w-7
+                            items-center
+                            justify-center
+                            rounded-lg
+                            bg-[#ff1744]/[0.06]
+                            text-xs
+                            text-[#ff1744]
+                          ">
+                            ⚡
+                          </span>
+
+                          <h2 className="
+                            font-semibold
+                            text-white
+                          ">
+                            Comment → DM
+                          </h2>
+
+                        </div>
+
+                        <span
+                          className={
+                            automation.is_active
+                              ? `
+                                rounded-full
+                                border
+                                border-emerald-500/10
+                                bg-emerald-500/[0.06]
+                                px-3
+                                py-1
+                                text-[10px]
+                                font-semibold
+                                uppercase
+                                tracking-wider
+                                text-emerald-400
+                              `
+                              : `
+                                rounded-full
+                                border
+                                border-white/[0.06]
+                                bg-white/[0.03]
+                                px-3
+                                py-1
+                                text-[10px]
+                                font-semibold
+                                uppercase
+                                tracking-wider
+                                text-gray-600
+                              `
+                          }
+                        >
+                          <span className="mr-1.5">
+                            ●
+                          </span>
+
+                          {automation.is_active
+                            ? "ON"
+                            : "OFF"}
+                        </span>
+
+                      </div>
+
+                      {/* Caption */}
+
+                      <p className="
+                        mt-3
+                        line-clamp-2
+                        text-sm
+                        leading-5
+                        text-gray-500
+                      ">
+                        {automation.post?.caption ||
+                          "No reel description"}
+                      </p>
+
+                      {/* DM */}
+
+                      <div className="
+                        mt-3
+                        rounded-xl
+                        border
+                        border-white/[0.05]
+                        bg-white/[0.02]
+                        px-3
+                        py-2.5
+                      ">
+
+                        <p className="
+                          text-[9px]
+                          font-semibold
+                          uppercase
+                          tracking-[0.15em]
+                          text-gray-700
+                        ">
+                          Automatic DM
+                        </p>
+
+                        <p className="
+                          mt-1
+                          line-clamp-2
+                          text-xs
+                          leading-5
+                          text-gray-400
+                        ">
+                          {automation.dm_message}
+                        </p>
+
+                      </div>
+
+                      {/* Button */}
+
+                      {automation.button_name &&
+                        automation.button_url && (
+
+                          <div className="
+                            mt-3
+                            inline-flex
+                            items-center
+                            gap-2
+                            rounded-lg
+                            border
+                            border-[#ff1744]/10
+                            bg-[#ff1744]/[0.04]
+                            px-3
+                            py-1.5
+                            text-[10px]
+                            font-medium
+                            text-[#ff6b86]
+                          ">
+
+                            <span>
+                              ↗
+                            </span>
+
+                            Button:{" "}
+                            {automation.button_name}
+
+                          </div>
+
+                        )}
+
+                    </div>
+
+                    {/* =======================================
+                        ACTIONS
+                    ======================================= */}
+
+                    <div className="
+                      flex
+                      shrink-0
+                      items-center
+                      gap-2
+                      xl:flex-col
+                    ">
+
+                      <Link
+                        href={`/dashboard/automations/${automation.id}/edit`}
+                        className="
+                          rounded-xl
+                          border
+                          border-white/[0.08]
+                          bg-white/[0.02]
+                          px-4
+                          py-2.5
+                          text-xs
+                          font-medium
+                          text-gray-400
+                          transition-colors
+                          hover:border-white/[0.15]
+                          hover:bg-white/[0.05]
+                          hover:text-white
+                        "
+                      >
+                        Edit
+                      </Link>
+
+                      <form action={deleteAutomation}>
+                        <input
+                          type="hidden"
+                          name="automation_id"
+                          value={automation.id}
+                        />
+
+                        <DeleteAutomationButton />
+                      </form>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+              ))
+
+            )}
+
+          </div>
 
         </div>
 
@@ -284,24 +696,87 @@ export default async function AutomationsPage() {
   );
 }
 
+/* ============================================================
+   STAT
+============================================================ */
 
 function Stat({
   title,
   value,
+  accent = "default",
 }: {
   title: string;
   value: string;
+  accent?: "default" | "green" | "muted";
 }) {
+  const valueClass =
+    accent === "green"
+      ? "text-emerald-400"
+      : accent === "muted"
+        ? "text-gray-400"
+        : "text-white";
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+    <div className="
+      rounded-[22px]
+      border
+      border-white/[0.07]
+      bg-[#0b0b0b]
+      p-6
+    ">
 
-      <p className="text-xs text-white/40">
-        {title}
+      <div className="
+        flex
+        items-center
+        justify-between
+      ">
+
+        <p className="
+          text-[10px]
+          font-semibold
+          uppercase
+          tracking-[0.16em]
+          text-gray-600
+        ">
+          {title}
+        </p>
+
+        <span
+          className={
+            accent === "green"
+              ? "h-1.5 w-1.5 rounded-full bg-emerald-400"
+              : "h-1.5 w-1.5 rounded-full bg-[#ff1744]"
+          }
+        />
+
+      </div>
+
+      <p
+        className={`
+          mt-5
+          text-3xl
+          font-bold
+          tracking-[-0.04em]
+          ${valueClass}
+        `}
+      >
+        {value}
       </p>
 
-      <p className="mt-2 text-3xl font-bold">
-        {value}
+      <div className="
+        mt-5
+        h-px
+        bg-white/[0.05]
+      " />
+
+      <p className="
+        mt-3
+        text-[9px]
+        uppercase
+        tracking-[0.14em]
+        text-gray-700
+      ">
+        DevilX Automation Engine
       </p>
 
     </div>

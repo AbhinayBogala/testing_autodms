@@ -1,5 +1,5 @@
 -- ============================================================
--- AUTO DM - SAFE ADDITIVE MIGRATION
+-- DevilX - SAFE ADDITIVE MIGRATION
 -- Run once in Supabase SQL Editor.
 -- ============================================================
 
