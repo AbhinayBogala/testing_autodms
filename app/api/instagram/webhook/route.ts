@@ -559,7 +559,9 @@ async function processComment(
       .from(
         "instagram_posts"
       )
-      .select("id")
+      .select(
+        "id, instagram_media_id, instagram_account_id"
+      )
       .eq(
         "instagram_media_id",
         mediaId
@@ -587,6 +589,16 @@ async function processComment(
       return;
     }
 
+    /*
+     * IMPORTANT:
+     *
+     * instagram_automations.instagram_post_id stores the
+     * Supabase instagram_posts.id UUID.
+     *
+     * The webhook receives the Instagram MEDIA ID, so we first
+     * find the matching instagram_posts row above and then use
+     * post.id to find the automation.
+     */
     const {
       data: automations,
       error: automationError,
@@ -614,6 +626,10 @@ async function processComment(
       .eq(
         "instagram_post_id",
         post.id
+      )
+      .eq(
+        "instagram_account_id",
+        post.instagram_account_id
       )
       .eq(
         "is_active",
@@ -1140,29 +1156,40 @@ async function saveInstagramComment({
     .eq("instagram_media_id", mediaId)
     .maybeSingle();
 
-  // The automation is stored in instagram_automations, while
-  // instagram_comments.automation_id may reference automations.id.
-  // Only store the automation_id when that parent row actually exists.
+  /*
+   * Automations are stored in instagram_automations.
+   *
+   * Do NOT look up the automation in the old "automations" table.
+   * That was a separate automation schema and caused valid
+   * instagram_automations IDs to be rejected when saving comments.
+   *
+   * Keep the automation ID only if instagram_comments.automation_id
+   * is configured to reference instagram_automations.id.
+   *
+   * If your current database still has a foreign key from
+   * instagram_comments.automation_id -> automations.id, leave this
+   * value null until that database constraint is migrated.
+   */
   let safeAutomationId: string | null = null;
 
   if (automationId) {
-    const { data: parentAutomation, error: parentAutomationError } =
+    const { data: currentAutomation, error: currentAutomationError } =
       await supabase
-        .from("automations")
+        .from("instagram_automations")
         .select("id")
         .eq("id", automationId)
         .maybeSingle();
 
-    if (parentAutomationError) {
+    if (currentAutomationError) {
       console.warn(
-        "AUTOMATION PARENT LOOKUP FAILED:",
-        parentAutomationError
+        "INSTAGRAM AUTOMATION LOOKUP FAILED:",
+        currentAutomationError
       );
-    } else if (parentAutomation) {
-      safeAutomationId = parentAutomation.id;
+    } else if (currentAutomation) {
+      safeAutomationId = currentAutomation.id;
     } else {
       console.warn(
-        "AUTOMATION ID NOT FOUND IN automations; SAVING NULL automation_id:",
+        "INSTAGRAM AUTOMATION ID NOT FOUND:",
         automationId
       );
     }
