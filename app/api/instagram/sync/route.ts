@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+
 import {
   graphUrl,
   readJson,
@@ -12,13 +14,13 @@ export async function POST() {
   try {
     const supabase = await createClient();
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
     // =========================================================
     // AUTHENTICATION
     // =========================================================
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     if (!user) {
       return NextResponse.json(
@@ -32,7 +34,7 @@ export async function POST() {
     }
 
     // =========================================================
-    // LOAD INSTAGRAM ACCOUNT
+    // LOAD ACTIVE INSTAGRAM ACCOUNT
     // =========================================================
 
     const {
@@ -91,14 +93,6 @@ export async function POST() {
     // =========================================================
     // TOKEN REFRESH
     // =========================================================
-    //
-    // IMPORTANT:
-    // Do NOT automatically tell the user to reconnect if the
-    // refresh function throws.
-    //
-    // The existing token may still be valid.
-    // We will let Instagram itself determine that below.
-    // =========================================================
 
     let accessToken = account.access_token;
 
@@ -109,8 +103,14 @@ export async function POST() {
 
     let refreshError: string | null = null;
 
+    // IMPORTANT:
+    // This array collects post-sync errors without stopping
+    // the entire synchronization process.
+    const errors: string[] = [];
+
     try {
-      const fresh = await refreshAccountIfNeeded(account);
+      const fresh =
+        await refreshAccountIfNeeded(account);
 
       accessToken = fresh.accessToken;
 
@@ -138,11 +138,10 @@ export async function POST() {
         }
       );
 
-      // IMPORTANT:
-      // Do NOT return reconnectRequired here.
-      //
-      // We continue with the current token and let Instagram
-      // validate it through the actual API request.
+      // Do NOT force reconnect here.
+      // Continue with the existing token and allow
+      // Instagram API to determine whether it is valid.
+
       accessToken = account.access_token;
     }
 
@@ -171,6 +170,8 @@ export async function POST() {
       ].join(",")
     );
 
+    // Ask Instagram for the maximum page size.
+    // Pagination below continues until there is no next page.
     mediaUrl.searchParams.set(
       "limit",
       "100"
@@ -181,13 +182,16 @@ export async function POST() {
     // =========================================================
     //
     // Instagram returns media using pagination.
-    // The first request may return only 50/100 posts, so we
-    // continue following paging.next until there are no more
-    // pages.
+    //
+    // We continue following paging.next until there are
+    // no more pages.
     //
     // IMPORTANT:
-    // This sync fetches POSTS ONLY.
+    // Manual sync fetches POSTS ONLY.
     // It does NOT fetch historical comments or replies.
+    //
+    // New comments should continue to be handled by
+    // the Instagram webhook.
     // =========================================================
 
     let nextMediaUrl: string | null =
@@ -283,8 +287,10 @@ export async function POST() {
         {
           firstPage:
             firstMediaRequest,
+
           count:
             mediaData.data.length,
+
           hasNext:
             Boolean(
               mediaData?.paging?.next
@@ -365,11 +371,19 @@ export async function POST() {
           postError ||
           !savedPost
         ) {
-          errors.push(
+          const errorMessage =
             `Post ${instagramMediaId}: ${
               postError?.message ||
               "could not save"
-            }`
+            }`;
+
+          console.error(
+            "INSTAGRAM POST SAVE FAILED:",
+            errorMessage
+          );
+
+          errors.push(
+            errorMessage
           );
 
           continue;
@@ -397,6 +411,7 @@ export async function POST() {
      * Therefore it is now safe to remove posts that no longer
      * exist on Instagram.
      */
+
     paginationComplete = true;
 
     // =========================================================
@@ -406,34 +421,61 @@ export async function POST() {
     const syncedMediaIds =
       allSyncedMediaIds;
 
-    const { data: oldPosts } = await admin
-      .from("instagram_posts")
-      .select("id, instagram_media_id")
-      .eq("instagram_account_id", account.id);
+    const { data: oldPosts } =
+      await admin
+        .from("instagram_posts")
+        .select(
+          "id, instagram_media_id"
+        )
+        .eq(
+          "instagram_account_id",
+          account.id
+        );
 
     if (
       paginationComplete &&
       oldPosts
     ) {
-      const deletedPosts = oldPosts
-        .filter(
-          (post) =>
-            !syncedMediaIds.includes(
-              post.instagram_media_id
-            )
-        )
-        .map((post) => post.id);
+      const deletedPosts =
+        oldPosts
+          .filter(
+            (post) =>
+              !syncedMediaIds.includes(
+                post.instagram_media_id
+              )
+          )
+          .map(
+            (post) => post.id
+          );
 
-      if (deletedPosts.length > 0) {
-        await admin
+      if (
+        deletedPosts.length > 0
+      ) {
+        const {
+          error: deleteError,
+        } = await admin
           .from("instagram_posts")
           .delete()
-          .in("id", deletedPosts);
+          .in(
+            "id",
+            deletedPosts
+          );
 
-        console.log(
-          "REMOVED DELETED INSTAGRAM POSTS:",
-          deletedPosts
-        );
+        if (deleteError) {
+          console.error(
+            "FAILED TO REMOVE DELETED INSTAGRAM POSTS:",
+            deleteError
+          );
+
+          errors.push(
+            `Failed to remove deleted posts: ${deleteError.message}`
+          );
+        } else {
+          console.log(
+            "REMOVED DELETED INSTAGRAM POSTS:",
+            deletedPosts
+          );
+        }
       }
     }
 
@@ -441,11 +483,13 @@ export async function POST() {
     // SUCCESS
     // =========================================================
     //
-    // IMPORTANT:
     // Manual sync intentionally fetches/posts only.
-    // Historical comments and replies are NOT fetched or stored.
-    // New comments should continue to be handled by the Instagram
-    // webhook separately.
+    //
+    // Historical comments and replies are NOT fetched
+    // or stored.
+    //
+    // New comments should continue to be handled by the
+    // Instagram webhook separately.
     // =========================================================
 
     return NextResponse.json({
