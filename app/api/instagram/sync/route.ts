@@ -11,12 +11,14 @@ import {
 } from "@/lib/instagram";
 
 export async function POST() {
-  try {
-    const supabase = await createClient();
+  const syncStartedAt = Date.now();
 
+  try {
     // =========================================================
     // AUTHENTICATION
     // =========================================================
+
+    const supabase = await createClient();
 
     const {
       data: { user },
@@ -96,17 +98,9 @@ export async function POST() {
 
     let accessToken = account.access_token;
 
-    // Number of posts successfully saved/updated.
-    let synced = 0;
-
     let refreshedToken = false;
 
     let refreshError: string | null = null;
-
-    // IMPORTANT:
-    // This array collects post-sync errors without stopping
-    // the entire synchronization process.
-    const errors: string[] = [];
 
     try {
       const fresh =
@@ -138,22 +132,50 @@ export async function POST() {
         }
       );
 
-      // Do NOT force reconnect here.
-      // Continue with the existing token and allow
-      // Instagram API to determine whether it is valid.
-
+      // Keep using the current token.
       accessToken = account.access_token;
     }
 
     // =========================================================
-    // INSTAGRAM API
+    // ADMIN CLIENT
     // =========================================================
 
     const admin = createAdminClient();
 
-    const mediaUrl = new URL(
-      graphUrl("me/media")
+    // =========================================================
+    // 1. FETCH INSTAGRAM ACCOUNT STATISTICS
+    // =========================================================
+
+    const profileUrl =
+      new URL(
+        graphUrl("me")
+      );
+
+    profileUrl.searchParams.set(
+      "fields",
+      [
+        "id",
+        "username",
+        "profile_picture_url",
+        "followers_count",
+        "follows_count",
+        "media_count",
+      ].join(",")
     );
+
+    profileUrl.searchParams.set(
+      "access_token",
+      accessToken
+    );
+
+    // =========================================================
+    // 2. FETCH FIRST MEDIA PAGE IN PARALLEL
+    // =========================================================
+
+    const mediaUrl =
+      new URL(
+        graphUrl("me/media")
+      );
 
     mediaUrl.searchParams.set(
       "fields",
@@ -170,83 +192,354 @@ export async function POST() {
       ].join(",")
     );
 
-    // Ask Instagram for the maximum page size.
-    // Pagination below continues until there is no next page.
     mediaUrl.searchParams.set(
       "limit",
       "100"
     );
 
+    const [profileResponse, firstMediaResponse] =
+      await Promise.all([
+        fetch(
+          profileUrl.toString(),
+          {
+            headers: {
+              Authorization:
+                `Bearer ${accessToken}`,
+            },
+            cache: "no-store",
+          }
+        ),
+
+        fetch(
+          mediaUrl.toString(),
+          {
+            headers: {
+              Authorization:
+                `Bearer ${accessToken}`,
+            },
+            cache: "no-store",
+          }
+        ),
+      ]);
+
+    const profileData =
+      await readJson(profileResponse);
+
+    const firstMediaData =
+      await readJson(firstMediaResponse);
+
     // =========================================================
-    // FETCH ALL INSTAGRAM POSTS
-    // =========================================================
-    //
-    // Instagram returns media using pagination.
-    //
-    // We continue following paging.next until there are
-    // no more pages.
-    //
-    // IMPORTANT:
-    // Manual sync fetches POSTS ONLY.
-    // It does NOT fetch historical comments or replies.
-    //
-    // New comments should continue to be handled by
-    // the Instagram webhook.
+    // PROFILE API ERROR
     // =========================================================
 
-    let nextMediaUrl: string | null =
-      mediaUrl.toString();
-
-    let firstMediaRequest = true;
-
-    const allSyncedMediaIds: string[] = [];
-
-    let paginationComplete = true;
-
-    while (nextMediaUrl) {
-      const currentUrl = nextMediaUrl;
-
-      const mediaResponse = await fetch(
-        currentUrl,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          cache: "no-store",
-        }
+    if (!profileResponse.ok) {
+      console.error(
+        "INSTAGRAM PROFILE FETCH FAILED:",
+        profileData
       );
 
-      const mediaData =
-        await readJson(mediaResponse);
+      if (
+        isInstagramTokenError(
+          profileData
+        )
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Instagram connection expired. Please reconnect Instagram.",
+            reconnectRequired: true,
+            details: profileData,
+            refreshError,
+          },
+          {
+            status: 401,
+          }
+        );
+      }
 
-      // =======================================================
-      // TOKEN / API ERROR
-      // =======================================================
+      return NextResponse.json(
+        {
+          error:
+            profileData?.error?.message ||
+            profileData?.message ||
+            "Failed to fetch Instagram account information",
+
+          details: profileData,
+
+          refreshError,
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =========================================================
+    // MEDIA API ERROR
+    // =========================================================
+
+    if (
+      !firstMediaResponse.ok ||
+      !Array.isArray(
+        firstMediaData?.data
+      )
+    ) {
+      console.error(
+        "INSTAGRAM MEDIA FETCH FAILED:",
+        firstMediaData
+      );
+
+      if (
+        isInstagramTokenError(
+          firstMediaData
+        )
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Instagram connection expired. Please reconnect Instagram.",
+            reconnectRequired: true,
+            details: firstMediaData,
+            refreshError,
+          },
+          {
+            status: 401,
+          }
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error:
+            firstMediaData?.error?.message ||
+            firstMediaData?.message ||
+            "Failed to fetch Instagram media",
+
+          details: firstMediaData,
+
+          refreshError,
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =========================================================
+    // 3. UPDATE ACCOUNT STATISTICS
+    // =========================================================
+
+    const {
+      error: accountUpdateError,
+    } = await admin
+      .from("instagram_accounts")
+      .update({
+        username:
+          profileData.username ??
+          null,
+
+        profile_picture_url:
+          profileData.profile_picture_url ??
+          null,
+
+        followers_count:
+          profileData.followers_count ??
+          0,
+
+        following_count:
+          profileData.follows_count ??
+          0,
+
+        media_count:
+          profileData.media_count ??
+          0,
+
+        updated_at:
+          new Date().toISOString(),
+      })
+      .eq(
+        "id",
+        account.id
+      );
+
+    if (accountUpdateError) {
+      console.error(
+        "FAILED TO UPDATE INSTAGRAM ACCOUNT STATS:",
+        accountUpdateError
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "Failed to update Instagram account statistics",
+
+          details:
+            accountUpdateError.message,
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    console.log(
+      "INSTAGRAM ACCOUNT STATS UPDATED:",
+      {
+        username:
+          profileData.username,
+
+        followers:
+          profileData.followers_count,
+
+        following:
+          profileData.follows_count,
+
+        media:
+          profileData.media_count,
+      }
+    );
+
+    // =========================================================
+    // 4. COLLECT ALL POSTS
+    // =========================================================
+
+    type InstagramPost = {
+      instagram_account_id: string;
+      instagram_media_id: string;
+      caption: string | null;
+      media_type: string | null;
+      media_url: string | null;
+      permalink: string | null;
+      published_at: string | null;
+      likes_count: number;
+      comments_count: number;
+      updated_at: string;
+    };
+
+    const posts: InstagramPost[] = [];
+
+    let currentMediaData =
+      firstMediaData;
+
+    let nextMediaUrl: string | null =
+      currentMediaData?.paging?.next
+        ? String(
+            currentMediaData.paging.next
+          )
+        : null;
+
+    let pagesFetched = 1;
+
+    // ---------------------------------------------------------
+    // ADD FIRST PAGE
+    // ---------------------------------------------------------
+
+    for (
+      const media of currentMediaData.data
+    ) {
+      const instagramMediaId =
+        String(media.id);
+
+      posts.push({
+        instagram_account_id:
+          account.id,
+
+        instagram_media_id:
+          instagramMediaId,
+
+        caption:
+          media.caption ??
+          null,
+
+        media_type:
+          media.media_type ??
+          null,
+
+        media_url:
+          media.media_url ??
+          media.thumbnail_url ??
+          null,
+
+        permalink:
+          media.permalink ??
+          null,
+
+        published_at:
+          media.timestamp
+            ? new Date(
+                media.timestamp
+              ).toISOString()
+            : null,
+
+        likes_count:
+          media.like_count ??
+          0,
+
+        comments_count:
+          media.comments_count ??
+          0,
+
+        updated_at:
+          new Date().toISOString(),
+      });
+    }
+
+    // =========================================================
+    // 5. FOLLOW PAGINATION
+    // =========================================================
+
+    while (nextMediaUrl) {
+      const currentUrl =
+        nextMediaUrl;
+
+      const mediaResponse =
+        await fetch(
+          currentUrl,
+          {
+            headers: {
+              Authorization:
+                `Bearer ${accessToken}`,
+            },
+            cache: "no-store",
+          }
+        );
+
+      const mediaData =
+        await readJson(
+          mediaResponse
+        );
 
       if (
         !mediaResponse.ok ||
-        !Array.isArray(mediaData?.data)
+        !Array.isArray(
+          mediaData?.data
+        )
       ) {
+        console.error(
+          "INSTAGRAM MEDIA PAGINATION FAILED:",
+          mediaData
+        );
+
         if (
           isInstagramTokenError(
             mediaData
           )
         ) {
-          console.error(
-            "INSTAGRAM TOKEN REJECTED BY API:",
-            {
-              accountId: account.id,
-              response: mediaData,
-            }
-          );
-
           return NextResponse.json(
             {
               error:
                 "Instagram connection expired. Please reconnect Instagram.",
-              reconnectRequired: true,
-              details: mediaData,
+
+              reconnectRequired:
+                true,
+
+              details:
+                mediaData,
+
               refreshError,
+
+              postsCollectedBeforeFailure:
+                posts.length,
             },
             {
               status: 401,
@@ -254,27 +547,20 @@ export async function POST() {
           );
         }
 
-        console.error(
-          "INSTAGRAM MEDIA PAGE FETCH FAILED:",
-          {
-            url: currentUrl,
-            response: mediaData,
-          }
-        );
-
         return NextResponse.json(
           {
             error:
               mediaData?.error?.message ||
               mediaData?.message ||
-              "Failed to fetch Instagram media",
+              "Failed while fetching Instagram posts",
 
-            details: mediaData,
+            details:
+              mediaData,
 
             refreshError,
 
-            syncedSoFar:
-              allSyncedMediaIds.length,
+            postsCollectedBeforeFailure:
+              posts.length,
           },
           {
             status: 400,
@@ -282,119 +568,57 @@ export async function POST() {
         );
       }
 
-      console.log(
-        "INSTAGRAM MEDIA PAGE RECEIVED:",
-        {
-          firstPage:
-            firstMediaRequest,
+      pagesFetched++;
 
-          count:
-            mediaData.data.length,
-
-          hasNext:
-            Boolean(
-              mediaData?.paging?.next
-            ),
-        }
-      );
-
-      firstMediaRequest = false;
-
-      // =======================================================
-      // SAVE POSTS FROM THIS PAGE
-      // =======================================================
-
-      for (const media of mediaData.data) {
+      for (
+        const media of mediaData.data
+      ) {
         const instagramMediaId =
           String(media.id);
 
-        allSyncedMediaIds.push(
-          instagramMediaId
-        );
+        posts.push({
+          instagram_account_id:
+            account.id,
 
-        // -----------------------------------------------------
-        // SAVE POST
-        // -----------------------------------------------------
+          instagram_media_id:
+            instagramMediaId,
 
-        const {
-          data: savedPost,
-          error: postError,
-        } = await admin
-          .from("instagram_posts")
-          .upsert(
-            {
-              instagram_account_id:
-                account.id,
+          caption:
+            media.caption ??
+            null,
 
-              instagram_media_id:
-                instagramMediaId,
+          media_type:
+            media.media_type ??
+            null,
 
-              caption:
-                media.caption ?? null,
+          media_url:
+            media.media_url ??
+            media.thumbnail_url ??
+            null,
 
-              media_type:
-                media.media_type ?? null,
+          permalink:
+            media.permalink ??
+            null,
 
-              media_url:
-                media.media_url ??
-                media.thumbnail_url ??
-                null,
+          published_at:
+            media.timestamp
+              ? new Date(
+                  media.timestamp
+                ).toISOString()
+              : null,
 
-              permalink:
-                media.permalink ?? null,
+          likes_count:
+            media.like_count ??
+            0,
 
-              published_at:
-                media.timestamp
-                  ? new Date(
-                      media.timestamp
-                    ).toISOString()
-                  : null,
+          comments_count:
+            media.comments_count ??
+            0,
 
-              likes_count:
-                media.like_count ?? 0,
-
-              comments_count:
-                media.comments_count ?? 0,
-
-              updated_at:
-                new Date().toISOString(),
-            },
-            {
-              onConflict:
-                "instagram_account_id,instagram_media_id",
-            }
-          )
-          .select("id")
-          .single();
-
-        if (
-          postError ||
-          !savedPost
-        ) {
-          const errorMessage =
-            `Post ${instagramMediaId}: ${
-              postError?.message ||
-              "could not save"
-            }`;
-
-          console.error(
-            "INSTAGRAM POST SAVE FAILED:",
-            errorMessage
-          );
-
-          errors.push(
-            errorMessage
-          );
-
-          continue;
-        }
-
-        synced++;
+          updated_at:
+            new Date().toISOString(),
+        });
       }
-
-      // =======================================================
-      // FOLLOW INSTAGRAM PAGINATION
-      // =======================================================
 
       nextMediaUrl =
         mediaData?.paging?.next
@@ -404,118 +628,213 @@ export async function POST() {
           : null;
     }
 
-    /*
-     * If we reach this point, every available Instagram
-     * media page was successfully fetched.
-     *
-     * Therefore it is now safe to remove posts that no longer
-     * exist on Instagram.
-     */
-
-    paginationComplete = true;
-
     // =========================================================
-    // REMOVE POSTS DELETED ON INSTAGRAM
+    // 6. BULK UPSERT POSTS
+    // =========================================================
+    //
+    // IMPORTANT:
+    //
+    // Existing posts are UPDATED.
+    // New posts are INSERTED.
+    //
+    // Existing instagram_posts.id values are preserved.
+    //
+    // NOTHING IS DELETED HERE.
+    //
     // =========================================================
 
-    const syncedMediaIds =
-      allSyncedMediaIds;
+    let synced = 0;
 
-    const { data: oldPosts } =
-      await admin
+    if (posts.length > 0) {
+      const {
+        data: savedPosts,
+        error: bulkUpsertError,
+      } = await admin
         .from("instagram_posts")
-        .select(
-          "id, instagram_media_id"
+        .upsert(
+          posts,
+          {
+            onConflict:
+              "instagram_account_id,instagram_media_id",
+          }
         )
-        .eq(
-          "instagram_account_id",
-          account.id
+        .select("id");
+
+      if (bulkUpsertError) {
+        console.error(
+          "INSTAGRAM BULK POST UPSERT FAILED:",
+          bulkUpsertError
         );
 
-    if (
-      paginationComplete &&
-      oldPosts
-    ) {
-      const deletedPosts =
-        oldPosts
-          .filter(
-            (post) =>
-              !syncedMediaIds.includes(
-                post.instagram_media_id
-              )
-          )
-          .map(
-            (post) => post.id
-          );
+        return NextResponse.json(
+          {
+            success: false,
 
-      if (
-        deletedPosts.length > 0
-      ) {
-        const {
-          error: deleteError,
-        } = await admin
-          .from("instagram_posts")
-          .delete()
-          .in(
-            "id",
-            deletedPosts
-          );
+            error:
+              "Failed to save Instagram posts",
 
-        if (deleteError) {
-          console.error(
-            "FAILED TO REMOVE DELETED INSTAGRAM POSTS:",
-            deleteError
-          );
+            details:
+              bulkUpsertError.message,
 
-          errors.push(
-            `Failed to remove deleted posts: ${deleteError.message}`
-          );
-        } else {
-          console.log(
-            "REMOVED DELETED INSTAGRAM POSTS:",
-            deletedPosts
-          );
-        }
+            totalPostsFetched:
+              posts.length,
+
+            pagesFetched,
+
+            refreshedToken,
+
+            refreshError,
+          },
+          {
+            status: 500,
+          }
+        );
       }
+
+      synced =
+        savedPosts?.length ??
+        posts.length;
     }
+
+    // =========================================================
+    // 7. IMPORTANT:
+    // DO NOT DELETE OLD POSTS
+    // =========================================================
+    //
+    // We intentionally do NOT compare the fetched posts
+    // against all database posts.
+    //
+    // Why?
+    //
+    // A post missing from the current API response does NOT
+    // necessarily mean Instagram deleted it.
+    //
+    // Also, deleting/recreating posts can break automation
+    // references.
+    //
+    // A separate cleanup/reconciliation process can handle
+    // confirmed deleted posts later.
+    //
+    // =========================================================
+
+    const syncDurationMs =
+      Date.now() -
+      syncStartedAt;
+
+    const syncDurationSeconds =
+      Number(
+        (
+          syncDurationMs /
+          1000
+        ).toFixed(2)
+      );
 
     // =========================================================
     // SUCCESS
     // =========================================================
-    //
-    // Manual sync intentionally fetches/posts only.
-    //
-    // Historical comments and replies are NOT fetched
-    // or stored.
-    //
-    // New comments should continue to be handled by the
-    // Instagram webhook separately.
-    // =========================================================
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "INSTAGRAM SYNC COMPLETED"
+    );
+
+    console.log({
+      accountId:
+        account.id,
+
+      username:
+        profileData.username,
+
+      followers:
+        profileData.followers_count,
+
+      following:
+        profileData.follows_count,
+
+      instagramMediaCount:
+        profileData.media_count,
+
+      postsFetched:
+        posts.length,
+
+      postsSynced:
+        synced,
+
+      pagesFetched,
+
+      durationMs:
+        syncDurationMs,
+
+      durationSeconds:
+        syncDurationSeconds,
+
+      refreshedToken,
+
+      refreshError,
+    });
+
+    console.log(
+      "========================================"
+    );
 
     return NextResponse.json({
       success: true,
 
+      // Account statistics
+      account: {
+        username:
+          profileData.username ??
+          null,
+
+        followers:
+          profileData.followers_count ??
+          0,
+
+        following:
+          profileData.follows_count ??
+          0,
+
+        mediaCount:
+          profileData.media_count ??
+          0,
+      },
+
+      // Post sync
       synced,
 
       totalPostsFetched:
-        allSyncedMediaIds.length,
+        posts.length,
 
-      pagesFetched:
-        allSyncedMediaIds.length > 0
-          ? "all"
-          : 0,
+      pagesFetched,
 
-      errors:
-        errors.slice(0, 20),
+      // Important behavior
+      deletedPosts: 0,
 
-      refreshedToken:
-        refreshedToken,
+      commentsSynced: 0,
 
-      // Useful for debugging.
-      // This does NOT mean reconnect is required.
+      repliesSynced: 0,
+
+      // Token information
+      refreshedToken,
+
       refreshError,
+
+      // Performance
+      syncDurationMs,
+
+      syncDurationSeconds,
+
+      // Compatibility
+      errors: [],
     });
   } catch (error) {
+    const syncDurationMs =
+      Date.now() -
+      syncStartedAt;
+
     console.error(
       "INSTAGRAM SYNC ERROR:",
       error
@@ -523,10 +842,14 @@ export async function POST() {
 
     return NextResponse.json(
       {
+        success: false,
+
         error:
           error instanceof Error
             ? error.message
             : "Instagram sync failed",
+
+        syncDurationMs,
       },
       {
         status: 500,

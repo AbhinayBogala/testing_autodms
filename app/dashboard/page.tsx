@@ -76,17 +76,11 @@ export default async function DashboardPage() {
       updated_at
       `
     )
-    .eq(
-      "user_id",
-      user.id
-    )
-    .order(
-      "updated_at",
-      {
-        ascending: false,
-        nullsFirst: false,
-      }
-    );
+    .eq("user_id", user.id)
+    .order("updated_at", {
+      ascending: false,
+      nullsFirst: false,
+    });
 
   // ============================================================
   // IMPROVED SUPABASE ERROR LOGGING
@@ -226,6 +220,7 @@ export default async function DashboardPage() {
         <div>
           <div className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-[#ff1744]" />
+
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">
               DevilX / Overview
             </p>
@@ -244,6 +239,7 @@ export default async function DashboardPage() {
           {account?.is_connected && (
             <>
               <SyncInstagramButton />
+
               <DisconnectInstagramButton />
             </>
           )}
@@ -292,6 +288,7 @@ export default async function DashboardPage() {
               <div className="mb-4">
                 <div className="flex items-center gap-2">
                   <span className="h-1 w-1 rounded-full bg-[#ff1744]" />
+
                   <h2 className="text-lg font-semibold">
                     Instagram Accounts
                   </h2>
@@ -303,55 +300,60 @@ export default async function DashboardPage() {
               </div>
 
               <div className="space-y-3">
-                {accounts.map((instagramAccount) => (
-                  <div
-                    key={instagramAccount.id}
-                    className="flex items-center justify-between rounded-2xl border border-white/[0.07] bg-[#0b0b0b] p-4 transition-colors duration-200 hover:border-white/[0.12] hover:bg-[#0d0d0d]"
-                  >
-                    <div className="flex items-center gap-4">
-                      {instagramAccount.profile_picture_url ? (
-                        <img
-                          src={instagramAccount.profile_picture_url}
-                          alt={
-                            instagramAccount.username
+                {accounts.map(
+                  (instagramAccount) => (
+                    <div
+                      key={instagramAccount.id}
+                      className="flex items-center justify-between rounded-2xl border border-white/[0.07] bg-[#0b0b0b] p-4 transition-colors duration-200 hover:border-white/[0.12] hover:bg-[#0d0d0d]"
+                    >
+                      <div className="flex items-center gap-4">
+                        {instagramAccount.profile_picture_url ? (
+                          <img
+                            src={
+                              instagramAccount.profile_picture_url
+                            }
+                            alt={
+                              instagramAccount.username
+                                ? `@${instagramAccount.username}`
+                                : "Instagram account"
+                            }
+                            className="h-11 w-11 rounded-full object-cover ring-2 ring-white/[0.06]"
+                          />
+                        ) : (
+                          <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.07] bg-white/[0.04] text-gray-500">
+                            ◎
+                          </div>
+                        )}
+
+                        <div>
+                          <p className="font-medium text-white">
+                            {instagramAccount.username
                               ? `@${instagramAccount.username}`
-                              : "Instagram account"
-                          }
-                          className="h-11 w-11 rounded-full object-cover ring-2 ring-white/[0.06]"
-                        />
-                      ) : (
-                        <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.07] bg-white/[0.04] text-gray-500">
-                          ◎
+                              : "Instagram Account"}
+                          </p>
+
+                          <p className="mt-1 text-xs text-gray-600">
+                            {instagramAccount.is_connected
+                              ? "Currently connected"
+                              : "Saved account"}
+                          </p>
                         </div>
-                      )}
-
-                      <div>
-                        <p className="font-medium text-white">
-                          {instagramAccount.username
-                            ? `@${instagramAccount.username}`
-                            : "Instagram Account"}
-                        </p>
-
-                        <p className="mt-1 text-xs text-gray-600">
-                          {instagramAccount.is_connected
-                            ? "Currently connected"
-                            : "Saved account"}
-                        </p>
                       </div>
-                    </div>
 
-                    {instagramAccount.is_connected ? (
-                      <span className="flex items-center gap-2 rounded-full border border-emerald-500/10 bg-emerald-500/[0.06] px-3 py-1.5 text-[11px] font-medium text-emerald-400">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                        Active
-                      </span>
-                    ) : (
-                      <span className="rounded-full border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-[11px] text-gray-600">
-                        Inactive
-                      </span>
-                    )}
-                  </div>
-                ))}
+                      {instagramAccount.is_connected ? (
+                        <span className="flex items-center gap-2 rounded-full border border-emerald-500/10 bg-emerald-500/[0.06] px-3 py-1.5 text-[11px] font-medium text-emerald-400">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+
+                          Active
+                        </span>
+                      ) : (
+                        <span className="rounded-full border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-[11px] text-gray-600">
+                          Inactive
+                        </span>
+                      )}
+                    </div>
+                  )
+                )}
               </div>
             </section>
           )}
@@ -363,22 +365,36 @@ export default async function DashboardPage() {
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               label="Followers"
-              value={formatNumber(account.followers_count)}
+              value={formatNumber(
+                account.followers_count
+              )}
             />
+
+            {/* ==================================================
+                IMPORTANT:
+                Posts now comes from Instagram's official
+                media_count instead of the local database row count.
+            ================================================== */}
 
             <StatCard
               label="Posts"
-              value={String(postsCount)}
+              value={formatNumber(
+                account.media_count
+              )}
             />
 
             <StatCard
               label="Following"
-              value={formatNumber(account.following_count)}
+              value={formatNumber(
+                account.following_count
+              )}
             />
 
             <StatCard
               label="Active Automations"
-              value={String(activeAutomations)}
+              value={String(
+                activeAutomations
+              )}
             />
           </div>
 
@@ -403,17 +419,21 @@ export default async function DashboardPage() {
                   {account.token_expires_at
                     ? new Date(
                         account.token_expires_at
-                      ).toLocaleDateString("en-IN", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })
+                      ).toLocaleDateString(
+                        "en-IN",
+                        {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        }
+                      )
                     : "Managed automatically"}
                 </p>
               </div>
 
               <div className="flex items-center gap-2 self-start rounded-full border border-emerald-500/10 bg-emerald-500/[0.06] px-3 py-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+
                 <span className="text-xs text-emerald-400">
                   Long-lived token active
                 </span>
@@ -430,6 +450,7 @@ export default async function DashboardPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <span className="h-1 w-1 rounded-full bg-[#ff1744]" />
+
                   <h2 className="text-xl font-semibold tracking-tight">
                     Recent Posts
                   </h2>
@@ -439,6 +460,9 @@ export default async function DashboardPage() {
                   Click a post to view media and description.
                 </p>
               </div>
+
+              {/* This remains the number of detailed posts
+                  currently stored locally in DevilX. */}
 
               <span className="hidden text-xs text-gray-600 sm:block">
                 {postsCount} total
@@ -510,11 +534,9 @@ function StatCard({
 function formatNumber(
   value: number | null
 ) {
-
   return new Intl.NumberFormat(
     "en-IN"
   ).format(
     value ?? 0
   );
-
 }

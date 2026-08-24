@@ -5,12 +5,15 @@ import { redirect } from "next/navigation";
 import SyncInstagramButton from "../SyncInstagramButton";
 import PostsGrid from "../PostsGrid";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function ContentPage() {
   const supabase = await createClient();
 
-  // =========================================================
+  // ============================================================
   // AUTH
-  // =========================================================
+  // ============================================================
 
   const {
     data: { user },
@@ -20,9 +23,9 @@ export default async function ContentPage() {
     redirect("/login");
   }
 
-  // =========================================================
+  // ============================================================
   // ACTIVE INSTAGRAM ACCOUNT
-  // =========================================================
+  // ============================================================
 
   const {
     data: account,
@@ -48,9 +51,9 @@ export default async function ContentPage() {
     );
   }
 
-  // =========================================================
+  // ============================================================
   // POSTS
-  // =========================================================
+  // ============================================================
 
   const admin = createAdminClient();
 
@@ -61,6 +64,7 @@ export default async function ContentPage() {
     media_type: string | null;
     media_url: string | null;
     permalink: string | null;
+    published_at: string | null;
     likes_count: number | null;
     comments_count: number | null;
   }> = [];
@@ -79,6 +83,7 @@ export default async function ContentPage() {
           media_type,
           media_url,
           permalink,
+          published_at,
           likes_count,
           comments_count
         `
@@ -105,15 +110,16 @@ export default async function ContentPage() {
     }
   }
 
-  // =========================================================
+  // ============================================================
   // PAGE
-  // =========================================================
+  // ============================================================
 
   return (
     <div className="px-8 py-8">
-      {/* =====================================================
+
+      {/* ======================================================
           HEADER
-      ===================================================== */}
+      ====================================================== */}
 
       <div
         className="
@@ -158,9 +164,9 @@ export default async function ContentPage() {
         )}
       </div>
 
-      {/* =====================================================
+      {/* ======================================================
           NO ACTIVE ACCOUNT
-      ===================================================== */}
+      ====================================================== */}
 
       {!account && (
         <div
@@ -179,9 +185,9 @@ export default async function ContentPage() {
         </div>
       )}
 
-      {/* =====================================================
+      {/* ======================================================
           POSTS
-      ===================================================== */}
+      ====================================================== */}
 
       {account && posts.length === 0 && (
         <div
@@ -203,6 +209,13 @@ export default async function ContentPage() {
           Click Sync Instagram.
         </div>
       )}
+
+      {/* ======================================================
+          POSTS GRID
+          
+          PostsGrid also performs a client-side newest-first
+          sort using published_at.
+      ====================================================== */}
 
       {posts.length > 0 && (
         <PostsGrid
