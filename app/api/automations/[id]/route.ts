@@ -166,14 +166,8 @@ export async function GET(
         comments_count
         `
       )
-      .eq(
-        "instagram_account_id",
-        account.id
-      )
-      .eq(
-        "id",
-        automation.instagram_post_id
-      )
+      .eq("instagram_account_id", account.id)
+      .eq("id", automation.instagram_post_id)
       .maybeSingle();
 
     post = postById;
@@ -194,14 +188,8 @@ export async function GET(
           comments_count
           `
         )
-        .eq(
-          "instagram_account_id",
-          account.id
-        )
-        .eq(
-          "instagram_media_id",
-          automation.instagram_post_id
-        )
+        .eq("instagram_account_id", account.id)
+        .eq("instagram_media_id", automation.instagram_post_id)
         .maybeSingle();
 
       post = postByMediaId;
@@ -242,6 +230,232 @@ export async function GET(
           error instanceof Error
             ? error.message
             : "Failed to load automation",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}
+
+/**
+ * POST
+ *
+ * Duplicate an existing automation.
+ *
+ * IMPORTANT:
+ * - A completely new automation row is created.
+ * - The original automation is never modified.
+ * - The database generates the new ID.
+ * - The duplicate starts INACTIVE.
+ * - Runtime/history information is not copied.
+ */
+export async function POST(
+  _request: NextRequest,
+  context: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  try {
+    const { id } = await context.params;
+
+    const supabase = await createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
+    const account = await getAccount(user.id);
+
+    if (!account) {
+      return NextResponse.json(
+        {
+          error: "Instagram account not found",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    const admin = createAdminClient();
+
+    /**
+     * Find the original automation.
+     *
+     * We verify both user_id and instagram_account_id so one
+     * user cannot duplicate another account's automation.
+     */
+    const {
+      data: originalAutomation,
+      error: findError,
+    } = await admin
+      .from("instagram_automations")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .eq("instagram_account_id", account.id)
+      .maybeSingle();
+
+    if (findError) {
+      console.error(
+        "INSTAGRAM AUTOMATION DUPLICATE FIND ERROR:",
+        findError
+      );
+
+      return NextResponse.json(
+        {
+          error: findError.message,
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    if (!originalAutomation) {
+      return NextResponse.json(
+        {
+          error: "Automation not found",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    /**
+     * Create the duplicate.
+     *
+     * DO NOT copy:
+     * - id
+     * - created_at
+     * - updated_at
+     *
+     * The database will create a new ID.
+     *
+     * The duplicate starts inactive so it cannot immediately
+     * process comments on the same Reel as the original.
+     */
+    const duplicateAutomation = {
+      user_id: user.id,
+
+      instagram_account_id:
+        account.id,
+
+      instagram_post_id:
+        originalAutomation.instagram_post_id,
+
+      trigger_type:
+        originalAutomation.trigger_type,
+
+      trigger_keyword:
+        originalAutomation.trigger_keyword,
+
+      trigger_keywords:
+        originalAutomation.trigger_keywords,
+
+      dm_message:
+        originalAutomation.dm_message,
+
+      is_active: false,
+
+      button_name:
+        originalAutomation.button_name,
+
+      button_url:
+        originalAutomation.button_url,
+
+      reply_enabled:
+        originalAutomation.reply_enabled,
+
+      reply_text:
+        originalAutomation.reply_text,
+
+      created_at:
+        new Date().toISOString(),
+
+      updated_at:
+        new Date().toISOString(),
+    };
+
+    console.log(
+      "DUPLICATING INSTAGRAM AUTOMATION:",
+      {
+        originalAutomationId: id,
+        accountId: account.id,
+      }
+    );
+
+    /**
+     * Insert the new automation.
+     */
+    const {
+      data: duplicated,
+      error: duplicateError,
+    } = await admin
+      .from("instagram_automations")
+      .insert(duplicateAutomation)
+      .select("*")
+      .single();
+
+    if (duplicateError) {
+      console.error(
+        "INSTAGRAM AUTOMATION DUPLICATE DATABASE ERROR:",
+        duplicateError
+      );
+
+      return NextResponse.json(
+        {
+          error: duplicateError.message,
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    console.log(
+      "INSTAGRAM AUTOMATION DUPLICATED:",
+      {
+        originalAutomationId: id,
+        newAutomationId: duplicated.id,
+        accountId: account.id,
+      }
+    );
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: duplicated,
+      },
+      {
+        status: 201,
+      }
+    );
+  } catch (error) {
+    console.error(
+      "INSTAGRAM AUTOMATION DUPLICATE EXCEPTION:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to duplicate automation",
       },
       {
         status: 500,
@@ -624,17 +838,16 @@ export async function PATCH(
     if (
       Array.isArray(body?.postIds)
     ) {
-      const requestedPostIds =
-        [
-          ...new Set(
-            body.postIds
-              .map(
-                (value: unknown) =>
-                  String(value).trim()
-              )
-              .filter(Boolean)
-          ),
-        ];
+      const requestedPostIds = [
+        ...new Set(
+          body.postIds
+            .map(
+              (value: unknown) =>
+                String(value).trim()
+            )
+            .filter(Boolean)
+        ),
+      ];
 
       if (
         requestedPostIds.length === 0
@@ -748,15 +961,23 @@ export async function PATCH(
       instagramPostId &&
       !Array.isArray(body?.postIds)
     ) {
-      const { data: legacyPost } = await admin
-        .from("instagram_posts")
-        .select("id")
-        .eq("instagram_account_id", account.id)
-        .eq("instagram_media_id", instagramPostId)
-        .maybeSingle();
+      const { data: legacyPost } =
+        await admin
+          .from("instagram_posts")
+          .select("id")
+          .eq(
+            "instagram_account_id",
+            account.id
+          )
+          .eq(
+            "instagram_media_id",
+            instagramPostId
+          )
+          .maybeSingle();
 
       if (legacyPost?.id) {
-        instagramPostId = legacyPost.id;
+        instagramPostId =
+          legacyPost.id;
       }
     }
 
@@ -976,10 +1197,7 @@ export async function DELETE(
       )
       .delete()
       .eq("id", id)
-      .eq(
-        "user_id",
-        user.id
-      )
+      .eq("user_id", user.id)
       .eq(
         "instagram_account_id",
         account.id

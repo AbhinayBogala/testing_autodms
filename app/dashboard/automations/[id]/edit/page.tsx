@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import PostSelector from "../../new/PostSelector";
+import ReplyFieldsEditor from "./ReplyFieldsEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,7 @@ type Automation = {
   dm_message: string;
   reply_enabled: boolean | null;
   reply_text: string | null;
+  reply_texts: string[] | null;
   button_name: string | null;
   button_url: string | null;
   is_active: boolean;
@@ -93,6 +95,7 @@ export default async function EditAutomationPage({
       dm_message,
       reply_enabled,
       reply_text,
+      reply_texts,
       button_name,
       button_url,
       is_active
@@ -241,6 +244,25 @@ export default async function EditAutomationPage({
         : [];
 
   /*
+   * Current public comment replies.
+   *
+   * New automations use reply_texts.
+   * Existing automations are migrated from the old reply_text field
+   * so they continue to show their current reply.
+   */
+  const currentReplyTexts =
+    Array.isArray(automationData.reply_texts) &&
+    automationData.reply_texts.length > 0
+      ? automationData.reply_texts.filter(
+          (reply): reply is string =>
+            typeof reply === "string" &&
+            reply.trim().length > 0
+        )
+      : automationData.reply_text?.trim()
+        ? [automationData.reply_text.trim()]
+        : [];
+
+  /*
    * =========================================================
    * UPDATE AUTOMATION
    * =========================================================
@@ -292,10 +314,29 @@ export default async function EditAutomationPage({
     const replyEnabled =
       formData.get("reply_enabled") === "on";
 
+    /*
+     * Read all public reply fields.
+     *
+     * ReplyFieldsEditor submits each textarea with the same
+     * name: reply_texts.
+     */
+    const replyTexts = Array.from(
+      new Set(
+        formData
+          .getAll("reply_texts")
+          .map((value) =>
+            String(value).trim()
+          )
+          .filter(Boolean)
+      )
+    );
+
+    /*
+     * Keep reply_text populated with the first reply for
+     * backward compatibility with older code.
+     */
     const replyText =
-      String(
-        formData.get("reply_text") ?? ""
-      ).trim();
+      replyTexts[0] ?? "";
 
     const buttonName =
       String(
@@ -457,10 +498,19 @@ export default async function EditAutomationPage({
         reply_enabled:
           replyEnabled,
 
+        /*
+         * Store all replies for the new rotating-reply system.
+         * Keep reply_text as the first reply for backward compatibility.
+         */
         reply_text:
           replyEnabled && replyText
             ? replyText
             : null,
+
+        reply_texts:
+          replyEnabled && replyTexts.length > 0
+            ? replyTexts
+            : [],
 
         button_name:
           buttonName.trim() || null,
@@ -753,19 +803,9 @@ export default async function EditAutomationPage({
                   />
                 </label>
 
-                <div className="mt-5">
-                  <label className="mb-2 block text-sm font-medium">
-                    Reply Message
-                  </label>
-
-                  <textarea
-                    name="reply_text"
-                    rows={4}
-                    defaultValue={automationData.reply_text ?? ""}
-                    placeholder="Thanks for commenting ❤️"
-                    className="w-full rounded-xl border border-white/[0.08] bg-[#070707] px-4 py-3 text-sm text-white outline-none placeholder:text-gray-700 focus:border-[#ff1744]/40"
-                  />
-                </div>
+                <ReplyFieldsEditor
+                  initialReplies={currentReplyTexts}
+                />
               </div>
 
               {/* CUSTOM BUTTON */}

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 
 import AutomationLiveUpdates from "./AutomationLiveUpdates";
 import DeleteAutomationButton from "./DeleteAutomationButton";
+import DuplicateAutomationButton from "./DuplicateAutomationButton";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,10 @@ async function deleteAutomation(formData: FormData) {
   await supabase
     .from("instagram_automations")
     .delete()
-    .eq("id", String(formData.get("automation_id")))
+    .eq(
+      "id",
+      String(formData.get("automation_id"))
+    )
     .eq("user_id", user.id);
 }
 
@@ -56,20 +60,23 @@ export default async function AutomationsPage() {
     );
   }
 
-  const { data: automationData } = await supabase
-    .from("instagram_automations")
-    .select(`
-      id,
-      instagram_post_id,
-      trigger_type,
-      dm_message,
-      is_active,
-      created_at,
-      button_name,
-      button_url
-    `)
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
+  const { data: automationData } =
+    await supabase
+      .from("instagram_automations")
+      .select(`
+        id,
+        instagram_post_id,
+        trigger_type,
+        dm_message,
+        is_active,
+        created_at,
+        button_name,
+        button_url
+      `)
+      .eq("user_id", user.id)
+      .order("created_at", {
+        ascending: false,
+      });
 
   const automations = automationData ?? [];
 
@@ -91,16 +98,16 @@ export default async function AutomationsPage() {
 
   const posts = postData ?? [];
 
-  const list: Automation[] = automations.map(
-    (item) => ({
+  const list: Automation[] =
+    automations.map((item) => ({
       ...item,
       post:
         posts.find(
           (post) =>
-            post.id === item.instagram_post_id
+            post.id ===
+            item.instagram_post_id
         ) ?? null,
-    })
-  );
+    }));
 
   const active = list.filter(
     (item) => item.is_active
@@ -145,32 +152,38 @@ export default async function AutomationsPage() {
 
               <span className="h-1.5 w-1.5 rounded-full bg-[#ff1744]" />
 
-              <p className="
-                text-[10px]
-                font-semibold
-                uppercase
-                tracking-[0.2em]
-                text-gray-600
-              ">
+              <p
+                className="
+                  text-[10px]
+                  font-semibold
+                  uppercase
+                  tracking-[0.2em]
+                  text-gray-600
+                "
+              >
                 DevilX / Automation Engine
               </p>
 
             </div>
 
-            <h1 className="
-              mt-3
-              text-3xl
-              font-bold
-              tracking-[-0.04em]
-            ">
+            <h1
+              className="
+                mt-3
+                text-3xl
+                font-bold
+                tracking-[-0.04em]
+              "
+            >
               Automations
             </h1>
 
-            <p className="
-              mt-2
-              text-sm
-              text-gray-500
-            ">
+            <p
+              className="
+                mt-2
+                text-sm
+                text-gray-500
+              "
+            >
               Manage Instagram comment-to-DM automations.
             </p>
 
@@ -218,11 +231,13 @@ export default async function AutomationsPage() {
             STATS
         =================================================== */}
 
-        <div className="
-          grid
-          gap-4
-          sm:grid-cols-3
-        ">
+        <div
+          className="
+            grid
+            gap-4
+            sm:grid-cols-3
+          "
+        >
 
           <Stat
             title="Total Automations"
@@ -250,54 +265,64 @@ export default async function AutomationsPage() {
 
         <div className="mt-8">
 
-          <div className="
-            mb-4
-            flex
-            items-center
-            justify-between
-          ">
+          <div
+            className="
+              mb-4
+              flex
+              items-center
+              justify-between
+            "
+          >
 
             <div>
 
               <div className="flex items-center gap-2">
 
-                <span className="
-                  h-1
-                  w-1
-                  rounded-full
-                  bg-[#ff1744]
-                " />
+                <span
+                  className="
+                    h-1
+                    w-1
+                    rounded-full
+                    bg-[#ff1744]
+                  "
+                />
 
-                <h2 className="
-                  text-lg
-                  font-semibold
-                ">
+                <h2
+                  className="
+                    text-lg
+                    font-semibold
+                  "
+                >
                   Your Automations
                 </h2>
 
               </div>
 
-              <p className="
-                mt-1
-                text-xs
-                text-gray-600
-              ">
+              <p
+                className="
+                  mt-1
+                  text-xs
+                  text-gray-600
+                "
+              >
                 Comment triggers and automatic DM responses.
               </p>
 
             </div>
 
-            <span className="
-              rounded-full
-              border
-              border-white/[0.06]
-              bg-white/[0.025]
-              px-3
-              py-1.5
-              text-[10px]
-              font-medium
-              text-gray-500
-            ">
+            <span
+              className="
+                rounded-full
+                border
+                border-white/[0.06]
+                bg-white/[0.025]
+                px-3
+                py-1.5
+                text-[10px]
+                font-medium
+                text-gray-500
+              "
+            >
               {list.length} total
             </span>
 
@@ -309,49 +334,57 @@ export default async function AutomationsPage() {
 
               /* EMPTY STATE */
 
-              <div className="
-                rounded-[24px]
-                border
-                border-white/[0.07]
-                bg-[#0b0b0b]
-                px-6
-                py-16
-                text-center
-              ">
-
-                <div className="
-                  mx-auto
-                  flex
-                  h-14
-                  w-14
-                  items-center
-                  justify-center
-                  rounded-2xl
+              <div
+                className="
+                  rounded-[24px]
                   border
-                  border-[#ff1744]/10
-                  bg-[#ff1744]/[0.05]
-                  text-xl
-                  text-[#ff1744]
-                ">
+                  border-white/[0.07]
+                  bg-[#0b0b0b]
+                  px-6
+                  py-16
+                  text-center
+                "
+              >
+
+                <div
+                  className="
+                    mx-auto
+                    flex
+                    h-14
+                    w-14
+                    items-center
+                    justify-center
+                    rounded-2xl
+                    border
+                    border-[#ff1744]/10
+                    bg-[#ff1744]/[0.05]
+                    text-xl
+                    text-[#ff1744]
+                  "
+                >
                   ⚡
                 </div>
 
-                <h3 className="
-                  mt-5
-                  text-lg
-                  font-semibold
-                ">
+                <h3
+                  className="
+                    mt-5
+                    text-lg
+                    font-semibold
+                  "
+                >
                   No automations yet
                 </h3>
 
-                <p className="
-                  mx-auto
-                  mt-2
-                  max-w-sm
-                  text-sm
-                  leading-6
-                  text-gray-600
-                ">
+                <p
+                  className="
+                    mx-auto
+                    mt-2
+                    max-w-sm
+                    text-sm
+                    leading-6
+                    text-gray-600
+                  "
+                >
                   Create your first comment-to-DM automation
                   to start automatically responding to Instagram
                   comments.
@@ -404,35 +437,42 @@ export default async function AutomationsPage() {
                   "
                 >
 
-                  <div className="
-                    flex
-                    flex-col
-                    gap-5
-                    xl:flex-row
-                    xl:items-center
-                  ">
+                  <div
+                    className="
+                      flex
+                      flex-col
+                      gap-5
+                      xl:flex-row
+                      xl:items-center
+                    "
+                  >
 
                     {/* =======================================
                         POST PREVIEW
                     ======================================= */}
 
-                    <div className="
-                      h-24
-                      w-24
-                      shrink-0
-                      overflow-hidden
-                      rounded-xl
-                      border
-                      border-white/[0.06]
-                      bg-black
-                    ">
+                    <div
+                      className="
+                        h-24
+                        w-24
+                        shrink-0
+                        overflow-hidden
+                        rounded-xl
+                        border
+                        border-white/[0.06]
+                        bg-black
+                      "
+                    >
 
                       {automation.post?.media_url ? (
 
-                        automation.post.media_type === "VIDEO" ? (
+                        automation.post.media_type ===
+                        "VIDEO" ? (
 
                           <video
-                            src={automation.post.media_url}
+                            src={
+                              automation.post.media_url
+                            }
                             className="
                               h-full
                               w-full
@@ -445,7 +485,9 @@ export default async function AutomationsPage() {
                         ) : (
 
                           <img
-                            src={automation.post.media_url}
+                            src={
+                              automation.post.media_url
+                            }
                             className="
                               h-full
                               w-full
@@ -458,13 +500,15 @@ export default async function AutomationsPage() {
 
                       ) : (
 
-                        <div className="
-                          flex
-                          h-full
-                          items-center
-                          justify-center
-                          text-gray-600
-                        ">
+                        <div
+                          className="
+                            flex
+                            h-full
+                            items-center
+                            justify-center
+                            text-gray-600
+                          "
+                        >
                           🎬
                         </div>
 
@@ -478,33 +522,39 @@ export default async function AutomationsPage() {
 
                     <div className="min-w-0 flex-1">
 
-                      <div className="
-                        flex
-                        flex-wrap
-                        items-center
-                        gap-3
-                      ">
+                      <div
+                        className="
+                          flex
+                          flex-wrap
+                          items-center
+                          gap-3
+                        "
+                      >
 
                         <div className="flex items-center gap-2">
 
-                          <span className="
-                            flex
-                            h-7
-                            w-7
-                            items-center
-                            justify-center
-                            rounded-lg
-                            bg-[#ff1744]/[0.06]
-                            text-xs
-                            text-[#ff1744]
-                          ">
+                          <span
+                            className="
+                              flex
+                              h-7
+                              w-7
+                              items-center
+                              justify-center
+                              rounded-lg
+                              bg-[#ff1744]/[0.06]
+                              text-xs
+                              text-[#ff1744]
+                            "
+                          >
                             ⚡
                           </span>
 
-                          <h2 className="
-                            font-semibold
-                            text-white
-                          ">
+                          <h2
+                            className="
+                              font-semibold
+                              text-white
+                            "
+                          >
                             Comment → DM
                           </h2>
 
@@ -554,46 +604,54 @@ export default async function AutomationsPage() {
 
                       {/* Caption */}
 
-                      <p className="
-                        mt-3
-                        line-clamp-2
-                        text-sm
-                        leading-5
-                        text-gray-500
-                      ">
+                      <p
+                        className="
+                          mt-3
+                          line-clamp-2
+                          text-sm
+                          leading-5
+                          text-gray-500
+                        "
+                      >
                         {automation.post?.caption ||
                           "No reel description"}
                       </p>
 
                       {/* DM */}
 
-                      <div className="
-                        mt-3
-                        rounded-xl
-                        border
-                        border-white/[0.05]
-                        bg-white/[0.02]
-                        px-3
-                        py-2.5
-                      ">
+                      <div
+                        className="
+                          mt-3
+                          rounded-xl
+                          border
+                          border-white/[0.05]
+                          bg-white/[0.02]
+                          px-3
+                          py-2.5
+                        "
+                      >
 
-                        <p className="
-                          text-[9px]
-                          font-semibold
-                          uppercase
-                          tracking-[0.15em]
-                          text-gray-700
-                        ">
+                        <p
+                          className="
+                            text-[9px]
+                            font-semibold
+                            uppercase
+                            tracking-[0.15em]
+                            text-gray-700
+                          "
+                        >
                           Automatic DM
                         </p>
 
-                        <p className="
-                          mt-1
-                          line-clamp-2
-                          text-xs
-                          leading-5
-                          text-gray-400
-                        ">
+                        <p
+                          className="
+                            mt-1
+                            line-clamp-2
+                            text-xs
+                            leading-5
+                            text-gray-400
+                          "
+                        >
                           {automation.dm_message}
                         </p>
 
@@ -604,21 +662,23 @@ export default async function AutomationsPage() {
                       {automation.button_name &&
                         automation.button_url && (
 
-                          <div className="
-                            mt-3
-                            inline-flex
-                            items-center
-                            gap-2
-                            rounded-lg
-                            border
-                            border-[#ff1744]/10
-                            bg-[#ff1744]/[0.04]
-                            px-3
-                            py-1.5
-                            text-[10px]
-                            font-medium
-                            text-[#ff6b86]
-                          ">
+                          <div
+                            className="
+                              mt-3
+                              inline-flex
+                              items-center
+                              gap-2
+                              rounded-lg
+                              border
+                              border-[#ff1744]/10
+                              bg-[#ff1744]/[0.04]
+                              px-3
+                              py-1.5
+                              text-[10px]
+                              font-medium
+                              text-[#ff6b86]
+                            "
+                          >
 
                             <span>
                               ↗
@@ -637,13 +697,17 @@ export default async function AutomationsPage() {
                         ACTIONS
                     ======================================= */}
 
-                    <div className="
-                      flex
-                      shrink-0
-                      items-center
-                      gap-2
-                      xl:flex-col
-                    ">
+                    <div
+                      className="
+                        flex
+                        shrink-0
+                        items-center
+                        gap-2
+                        xl:flex-col
+                      "
+                    >
+
+                      {/* Edit */}
 
                       <Link
                         href={`/dashboard/automations/${automation.id}/edit`}
@@ -665,6 +729,14 @@ export default async function AutomationsPage() {
                       >
                         Edit
                       </Link>
+
+                      {/* Duplicate */}
+
+                      <DuplicateAutomationButton
+                        automationId={automation.id}
+                      />
+
+                      {/* Delete */}
 
                       <form action={deleteAutomation}>
                         <input
@@ -717,27 +789,33 @@ function Stat({
         : "text-white";
 
   return (
-    <div className="
-      rounded-[22px]
-      border
-      border-white/[0.07]
-      bg-[#0b0b0b]
-      p-6
-    ">
+    <div
+      className="
+        rounded-[22px]
+        border
+        border-white/[0.07]
+        bg-[#0b0b0b]
+        p-6
+      "
+    >
 
-      <div className="
-        flex
-        items-center
-        justify-between
-      ">
+      <div
+        className="
+          flex
+          items-center
+          justify-between
+        "
+      >
 
-        <p className="
-          text-[10px]
-          font-semibold
-          uppercase
-          tracking-[0.16em]
-          text-gray-600
-        ">
+        <p
+          className="
+            text-[10px]
+            font-semibold
+            uppercase
+            tracking-[0.16em]
+            text-gray-600
+          "
+        >
           {title}
         </p>
 
@@ -763,19 +841,23 @@ function Stat({
         {value}
       </p>
 
-      <div className="
-        mt-5
-        h-px
-        bg-white/[0.05]
-      " />
+      <div
+        className="
+          mt-5
+          h-px
+          bg-white/[0.05]
+        "
+      />
 
-      <p className="
-        mt-3
-        text-[9px]
-        uppercase
-        tracking-[0.14em]
-        text-gray-700
-      ">
+      <p
+        className="
+          mt-3
+          text-[9px]
+          uppercase
+          tracking-[0.14em]
+          text-gray-700
+        "
+      >
         DevilX Automation Engine
       </p>
 

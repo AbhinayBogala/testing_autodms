@@ -1,4 +1,5 @@
 import PostSelector from "./PostSelector";
+import ReplyFieldsEditor from "../[id]/edit/ReplyFieldsEditor";
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -105,14 +106,24 @@ export default async function NewAutomationPage({
     const replyEnabled =
       rawReplyEnabled === "true";
 
-    const replyText = String(
-      formData.get("reply_text") ?? ""
-    ).trim();
+    // Read all rotating public reply messages.
+    const replyTexts = Array.from(
+      new Set(
+        formData
+          .getAll("reply_texts")
+          .map((value) => String(value).trim())
+          .filter(Boolean)
+      )
+    );
+
+    // Keep the legacy field populated with the first reply.
+    const replyText = replyTexts[0] ?? "";
 
     console.log(
       "PUBLIC REPLY FORM DATA:",
       {
         replyEnabled,
+        replyTexts,
         replyText,
         rawReplyEnabled,
       }
@@ -178,9 +189,9 @@ export default async function NewAutomationPage({
     /*
      * If public reply is enabled, require reply text.
      */
-    if (replyEnabled && !replyText) {
+    if (replyEnabled && replyTexts.length === 0) {
       redirect(
-        "/dashboard/automations/new?error=Please+enter+a+public+reply+message."
+        "/dashboard/automations/new?error=Please+enter+at+least+one+public+reply+message."
       );
     }
 
@@ -425,6 +436,11 @@ export default async function NewAutomationPage({
               ? replyText
               : null,
 
+          reply_texts:
+            replyEnabled && replyTexts.length > 0
+              ? replyTexts
+              : [],
+
           /*
            * DM BUTTON
            */
@@ -459,6 +475,7 @@ export default async function NewAutomationPage({
       {
         postId: post.id,
         replyEnabled,
+        replyTexts,
         replyText,
       }
     );
@@ -787,23 +804,7 @@ https://example.com`}
                     />
                   </label>
 
-                  <div className="mt-5">
-                    <label
-                      htmlFor="reply_text"
-                      className="mb-2 block text-sm font-medium"
-                    >
-                      Reply Message
-                    </label>
-
-                    <textarea
-                      id="reply_text"
-                      name="reply_text"
-                      rows={4}
-                      maxLength={1000}
-                      placeholder="Thanks for commenting ❤️"
-                      className="w-full resize-y rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm leading-6 outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
-                    />
-                  </div>
+                  <ReplyFieldsEditor />
                 </div>
 
                 <div className="mt-6 space-y-4">

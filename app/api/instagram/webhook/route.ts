@@ -34,7 +34,13 @@ type Automation = {
 
   dm_message: string;
   reply_enabled: boolean | null;
+
+  // Backward-compatible single reply.
   reply_text: string | null;
+
+  // Multiple public replies used in rotation.
+  reply_texts: string[] | null;
+
   button_name: string | null;
   button_url: string | null;
   is_active: boolean;
@@ -618,6 +624,7 @@ async function processComment(
         dm_message,
         reply_enabled,
         reply_text,
+        reply_texts,
         button_name,
         button_url,
         is_active
@@ -950,6 +957,9 @@ async function processComment(
 
       replyText:
         selectedAutomation.reply_text,
+
+      replyTexts:
+        selectedAutomation.reply_texts,
     });
 
     console.log("PUBLIC REPLY DEBUG:", {
@@ -957,6 +967,8 @@ async function processComment(
       replyEnabledType: typeof selectedAutomation.reply_enabled,
       replyText: selectedAutomation.reply_text,
       replyTextType: typeof selectedAutomation.reply_text,
+      replyTexts: selectedAutomation.reply_texts,
+      replyTextsType: typeof selectedAutomation.reply_texts,
       hasAccessToken: Boolean(account.access_token),
     });
 
@@ -972,38 +984,184 @@ async function processComment(
 
     if (
       selectedAutomation.reply_enabled &&
-      selectedAutomation.reply_text &&
       account.access_token
     ) {
+      /*
+       * Get the next public reply from Supabase.
+       *
+       * The database function:
+       *   get_next_instagram_reply(UUID)
+       *
+       * atomically:
+       *   1. reads the current rotation index
+       *   2. returns the current reply
+       *   3. advances the index
+       *   4. wraps back to the first reply
+       *
+       * This prevents concurrent comments from accidentally
+       * using the same rotation position.
+       *
+       * Existing reply_text remains the fallback for old
+       * automations that have not been migrated to reply_texts.
+       */
       console.log(
-        "SENDING PUBLIC COMMENT REPLY:",
+        "GETTING NEXT ROTATING PUBLIC REPLY:",
         {
-          commentId,
-          message:
-            selectedAutomation.reply_text,
+          automationId:
+            selectedAutomation.id,
         }
       );
 
-      const publicReply =
-        await replyToInstagramComment({
-          commentId,
-          message:
-            selectedAutomation.reply_text,
-          accessToken:
-            account.access_token,
-        });
-
-      publicReplySent =
-        publicReply.success;
-
-      console.log(
-        "PUBLIC COMMENT REPLY RESULT:",
-        publicReply
+      const {
+        data: rotatingReply,
+        error: rotatingReplyError,
+      } = await supabase.rpc(
+        "get_next_instagram_reply",
+        {
+          p_automation_id:
+            selectedAutomation.id,
+        }
       );
 
+      if (rotatingReplyError) {
+        console.error(
+          "ROTATING REPLY DATABASE ERROR:",
+          {
+            automationId: selectedAutomation.id,
+            commentId,
+            error: rotatingReplyError,
+          }
+        );
+
+        /*
+         * IMPORTANT:
+         *
+         * If reply_texts contains replies, do NOT silently
+         * fall back to reply_text. reply_text is normally
+         * Reply 1, which would hide a rotation failure.
+         *
+         * Only use legacy reply_text when this automation
+         * has no configured reply_texts.
+         */
+        const configuredReplies =
+          Array.isArray(
+            selectedAutomation.reply_texts
+          )
+            ? selectedAutomation.reply_texts
+                .map((reply) =>
+                  String(reply).trim()
+                )
+                .filter(Boolean)
+            : [];
+
+        if (
+          configuredReplies.length === 0 &&
+          selectedAutomation.reply_text
+        ) {
+          const fallbackReply =
+            String(
+              selectedAutomation.reply_text
+            ).trim();
+
+          if (fallbackReply) {
+            console.warn(
+              "USING LEGACY PUBLIC REPLY FALLBACK:",
+              {
+                automationId:
+                  selectedAutomation.id,
+                commentId,
+                message: fallbackReply,
+              }
+            );
+
+            const publicReply =
+              await replyToInstagramComment({
+                commentId,
+                message: fallbackReply,
+                accessToken:
+                  account.access_token,
+              });
+
+            publicReplySent =
+              publicReply.success;
+
+            console.log(
+              "PUBLIC COMMENT REPLY RESULT:",
+              publicReply
+            );
+          }
+        } else {
+          console.error(
+            "ROTATING PUBLIC REPLY NOT SENT BECAUSE THE ROTATION RPC FAILED.",
+            {
+              automationId:
+                selectedAutomation.id,
+              commentId,
+              configuredReplyCount:
+                configuredReplies.length,
+            }
+          );
+        }
+      } else if (
+        rotatingReply &&
+        String(rotatingReply).trim()
+      ) {
+        const replyMessage =
+          String(rotatingReply).trim();
+
+        console.log(
+          "ROTATING REPLY SELECTED:",
+          {
+            automationId:
+              selectedAutomation.id,
+            commentId,
+            selectedReply:
+              replyMessage,
+            configuredReplyCount:
+              Array.isArray(
+                selectedAutomation.reply_texts
+              )
+                ? selectedAutomation.reply_texts.length
+                : 0,
+          }
+        );
+
+        console.log(
+          "SENDING ROTATING PUBLIC COMMENT REPLY:",
+          {
+            automationId:
+              selectedAutomation.id,
+            commentId,
+            message: replyMessage,
+          }
+        );
+
+        const publicReply =
+          await replyToInstagramComment({
+            commentId,
+            message: replyMessage,
+            accessToken:
+              account.access_token,
+          });
+
+        publicReplySent =
+          publicReply.success;
+
+        console.log(
+          "PUBLIC COMMENT REPLY RESULT:",
+          publicReply
+        );
+      } else {
+        console.log(
+          "NO PUBLIC REPLY CONFIGURED:",
+          {
+            automationId:
+              selectedAutomation.id,
+          }
+        );
+      }
     } else if (
       selectedAutomation.reply_enabled &&
-      selectedAutomation.reply_text &&
       !account.access_token
     ) {
       console.error(
