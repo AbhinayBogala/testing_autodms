@@ -296,17 +296,10 @@ export async function POST(
   request: NextRequest,
   context: {
     params: Promise<{ id: string }>;
-  },
+  }
 ) {
   try {
     const { id } = await context.params;
-
-    if (!id) {
-      return NextResponse.json(
-        { error: "Automation ID is required" },
-        { status: 400 },
-      );
-    }
 
     const supabase = await createClient();
 
@@ -316,141 +309,118 @@ export async function POST(
 
     if (!user) {
       return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 },
+        {
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+        }
       );
     }
 
-    let body: {
-      source?: string;
-      schedulerMode?: boolean;
-      scheduledDate?: string | null;
-      scheduledPostId?: string | null;
-      instagramPostId?: string | null;
-      scheduledMediaUrl?: string | null;
-      scheduledMediaType?: string | null;
-      postIds?: unknown;
-    } = {};
-
-    try {
-      const parsed = await request.json();
-
-      if (
-        parsed &&
-        typeof parsed === "object" &&
-        !Array.isArray(parsed)
-      ) {
-        body = parsed;
-      }
-    } catch {
-      body = {};
-    }
-
-    const source =
-      typeof body.source === "string"
-        ? body.source.trim().toLowerCase()
-        : "";
-
-    const isSchedulerDuplicate =
-      source === "scheduler" ||
-      body.schedulerMode === true;
-
-    const admin = createAdminClient();
-
-    /*
-     * ----------------------------------------------------------
-     * Find the currently connected Instagram account.
-     * ----------------------------------------------------------
-     */
     const account = await getAccount(user.id);
 
     if (!account) {
       return NextResponse.json(
-        { error: "Instagram account not found" },
-        { status: 404 },
+        {
+          error: "Instagram account not found",
+        },
+        {
+          status: 404,
+        }
       );
     }
 
-    /*
-     * ----------------------------------------------------------
-     * Find the original automation.
+    const admin = createAdminClient();
+
+    /**
+     * ========================================================
+     * READ REQUEST BODY
+     * ========================================================
      *
-     * We intentionally verify user ownership first, then verify
-     * the account below. This prevents an automation from another
-     * Instagram account from being treated as valid.
-     * ----------------------------------------------------------
+     * Normal duplicate may send no body.
+     *
+     * Scheduler duplicate can send:
+     *
+     * {
+     *   source: "scheduler",
+     *   scheduledDate: "2026-08-30T19:00:00",
+     *   scheduledPostId: "...",
+     *   instagramPostId: "..."
+     * }
      */
+
+    let body: {
+      source?: string;
+      scheduledDate?: string;
+      scheduledPostId?: string;
+      instagramPostId?: string | null;
+      scheduledMediaUrl?: string | null;
+      scheduledMediaType?: string | null;
+    } = {};
+
+    try {
+      body = await request.json();
+    } catch {
+      body = {};
+    }
+
+    const isSchedulerDuplicate =
+      body.source === "scheduler";
+
+    /**
+     * ========================================================
+     * FIND ORIGINAL AUTOMATION
+     * ========================================================
+     */
+
     const {
       data: originalAutomation,
       error: findError,
     } = await admin
       .from("instagram_automations")
-      .select(
-        `
-        id,
-        user_id,
-        name,
-        instagram_account_id,
-        instagram_post_id,
-        trigger_type,
-        trigger_keyword,
-        trigger_keywords,
-        dm_message,
-        is_active,
-        created_at,
-        updated_at,
-        button_name,
-        button_url,
-        reply_enabled,
-        reply_text
-        `,
-      )
+      .select("*")
       .eq("id", id)
       .eq("user_id", user.id)
+      .eq(
+        "instagram_account_id",
+        account.id
+      )
       .maybeSingle();
 
     if (findError) {
       console.error(
         "INSTAGRAM AUTOMATION DUPLICATE FIND ERROR:",
-        findError,
+        findError
       );
 
       return NextResponse.json(
-        { error: findError.message },
-        { status: 500 },
+        {
+          error: findError.message,
+        },
+        {
+          status: 500,
+        }
       );
     }
 
     if (!originalAutomation) {
       return NextResponse.json(
-        { error: "Automation not found" },
-        { status: 404 },
-      );
-    }
-
-    /*
-     * ----------------------------------------------------------
-     * The original automation must belong to the currently
-     * connected Instagram account.
-     * ----------------------------------------------------------
-     */
-    if (
-      originalAutomation.instagram_account_id !== account.id
-    ) {
-      return NextResponse.json(
         {
-          error:
-            "Automation does not belong to the connected Instagram account.",
+          error: "Automation not found",
         },
-        { status: 403 },
+        {
+          status: 404,
+        }
       );
     }
 
-    /*
-     * ----------------------------------------------------------
-     * Build the new name.
-     * ----------------------------------------------------------
+    /**
+     * ========================================================
+     * BUILD DUPLICATE NAME
+     * ========================================================
      */
+
     const originalName =
       typeof originalAutomation.name === "string"
         ? originalAutomation.name.trim()
@@ -462,217 +432,139 @@ export async function POST(
       let scheduledDateLabel = "Post";
 
       if (body.scheduledDate) {
-        const parsedDate = new Date(body.scheduledDate);
+        const parsedDate =
+          new Date(body.scheduledDate);
 
-        if (!Number.isNaN(parsedDate.getTime())) {
+        if (
+          !Number.isNaN(
+            parsedDate.getTime()
+          )
+        ) {
           scheduledDateLabel =
-            parsedDate.toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            });
+            parsedDate.toLocaleDateString(
+              "en-US",
+              {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              }
+            );
         }
       }
 
       duplicateName = originalName
         ? `${originalName} — Scheduled ${scheduledDateLabel}`
         : `Scheduled ${scheduledDateLabel}`;
+
+      duplicateName = duplicateName.slice(0, 100);
     } else {
       duplicateName = originalName
         ? `${originalName} (Copy)`
         : "Automation (Copy)";
     }
 
-    duplicateName = duplicateName
-      .trim()
-      .slice(0, 100);
+    /**
+     * ========================================================
+     * DETERMINE POST
+     * ========================================================
+     *
+     * Normally preserve the original post.
+     *
+     * Scheduler can provide a different
+     * instagram_posts.id.
+     */
 
     /*
-     * ----------------------------------------------------------
-     * Determine instagram_post_id.
-     *
-     * SCHEDULER:
-     *     NULL
-     *
-     * NORMAL DUPLICATE:
-     *     Preserve the original post unless postIds was
-     *     explicitly supplied.
-     * ----------------------------------------------------------
+     * Scheduler duplicates represent a future scheduled post.
+     * Never inherit the original automation's Instagram post.
+     * The scheduled media itself belongs to scheduled_posts.media_url.
      */
     let instagramPostId: string | null =
       isSchedulerDuplicate
         ? null
-        : typeof originalAutomation.instagram_post_id === "string"
-          ? originalAutomation.instagram_post_id
-          : null;
+        : originalAutomation.instagram_post_id;
 
-    /*
-     * ----------------------------------------------------------
-     * NORMAL DUPLICATION:
-     *
-     * If postIds was explicitly supplied, validate it and use
-     * the first selected post.
-     * ----------------------------------------------------------
-     */
     if (
-      !isSchedulerDuplicate &&
-      Array.isArray(body.postIds)
+      isSchedulerDuplicate &&
+      body.instagramPostId
     ) {
-      const requestedPostIds = [
-        ...new Set(
-          body.postIds
-            .map((value: unknown) =>
-              String(value).trim(),
-            )
-            .filter(Boolean),
-        ),
-      ];
-
-      if (requestedPostIds.length === 0) {
-        return NextResponse.json(
-          {
-            error:
-              "Select at least one Instagram post.",
-          },
-          { status: 400 },
-        );
-      }
-
       const {
-        data: postsById,
-        error: postsByIdError,
+        data: scheduledInstagramPost,
+        error: scheduledPostError,
       } = await admin
         .from("instagram_posts")
         .select(
           `
           id,
-          instagram_media_id,
-          instagram_account_id
-          `,
+          instagram_media_id
+          `
+        )
+        .eq(
+          "id",
+          body.instagramPostId
         )
         .eq(
           "instagram_account_id",
-          account.id,
+          account.id
         )
-        .in(
-          "id",
-          requestedPostIds,
-        );
+        .maybeSingle();
 
-      if (postsByIdError) {
+      if (scheduledPostError) {
         console.error(
-          "NORMAL DUPLICATE POST LOOKUP ERROR:",
-          postsByIdError,
+          "SCHEDULER AUTOMATION POST LOOKUP ERROR:",
+          scheduledPostError
         );
 
-        return NextResponse.json(
-          { error: postsByIdError.message },
-          { status: 500 },
-        );
-      }
-
-      let selectedPosts = postsById ?? [];
-
-      /*
-       * Fallback for callers that provide Instagram media IDs.
-       */
-      if (selectedPosts.length === 0) {
-        const {
-          data: postsByMediaId,
-          error: postsByMediaIdError,
-        } = await admin
-          .from("instagram_posts")
-          .select(
-            `
-            id,
-            instagram_media_id,
-            instagram_account_id
-            `,
-          )
-          .eq(
-            "instagram_account_id",
-            account.id,
-          )
-          .in(
-            "instagram_media_id",
-            requestedPostIds,
-          );
-
-        if (postsByMediaIdError) {
-          return NextResponse.json(
-            {
-              error:
-                postsByMediaIdError.message,
-            },
-            { status: 500 },
-          );
-        }
-
-        selectedPosts = postsByMediaId ?? [];
-      }
-
-      if (selectedPosts.length === 0) {
         return NextResponse.json(
           {
             error:
-              "Selected Instagram post was not found.",
+              scheduledPostError.message,
           },
-          { status: 400 },
+          {
+            status: 500,
+          }
         );
       }
 
-      instagramPostId = selectedPosts[0].id;
-    }
-
-    /*
-     * ----------------------------------------------------------
-     * SCHEDULER:
-     *
-     * Never attach the old Instagram post to the scheduled
-     * automation. The scheduled media belongs to scheduled_posts.
-     *
-     * Even if an old frontend sends instagramPostId, it is ignored.
-     * ----------------------------------------------------------
-     */
-    if (isSchedulerDuplicate) {
-      instagramPostId = null;
-
-      if (body.scheduledDate) {
-        const scheduledDate =
-          new Date(body.scheduledDate);
-
-        if (
-          Number.isNaN(
-            scheduledDate.getTime(),
-          )
-        ) {
-          return NextResponse.json(
-            {
-              error:
-                "Invalid scheduled date.",
-            },
-            { status: 400 },
-          );
-        }
+      if (!scheduledInstagramPost) {
+        return NextResponse.json(
+          {
+            error:
+              "The selected Instagram post does not belong to this Instagram account.",
+          },
+          {
+            status: 400,
+          }
+        );
       }
+
+      instagramPostId =
+        scheduledInstagramPost.id;
     }
 
-    /*
-     * ----------------------------------------------------------
-     * Create duplicate.
-     * ----------------------------------------------------------
+    /**
+     * ========================================================
+     * CREATE DUPLICATE
+     * ========================================================
      */
-    const now = new Date().toISOString();
 
     const duplicateAutomation = {
       user_id: user.id,
 
-      instagram_account_id: account.id,
+      instagram_account_id:
+        account.id,
 
-      instagram_post_id: instagramPostId,
+      instagram_post_id:
+        instagramPostId,
 
+      /*
+       * NEW NAME
+       */
       name: duplicateName,
 
+      /*
+       * TRIGGER
+       */
       trigger_type:
         originalAutomation.trigger_type,
 
@@ -682,36 +574,53 @@ export async function POST(
       trigger_keywords:
         originalAutomation.trigger_keywords,
 
+      /*
+       * DM
+       */
       dm_message:
         originalAutomation.dm_message,
 
       /*
-       * A duplicated automation starts inactive.
+       * IMPORTANT
+       *
+       * Duplicate starts inactive.
        */
+
       is_active: false,
 
+      /*
+       * BUTTON
+       */
       button_name:
         originalAutomation.button_name,
 
       button_url:
         originalAutomation.button_url,
 
+      /*
+       * PUBLIC REPLY
+       */
       reply_enabled:
         originalAutomation.reply_enabled,
 
       reply_text:
         originalAutomation.reply_text,
 
-      created_at: now,
+      /*
+       * NEW RECORD TIMESTAMPS
+       */
 
-      updated_at: now,
+      created_at:
+        new Date().toISOString(),
+
+      updated_at:
+        new Date().toISOString(),
     };
 
     console.log(
       "DUPLICATING INSTAGRAM AUTOMATION:",
       {
-        originalAutomationId:
-          originalAutomation.id,
+        originalAutomationId: id,
 
         accountId:
           account.id,
@@ -732,96 +641,42 @@ export async function POST(
           instagramPostId,
 
         scheduledPostId:
-          body.scheduledPostId ?? null,
-
-        scheduledMediaUrl:
-          body.scheduledMediaUrl ?? null,
-
-        scheduledMediaType:
-          body.scheduledMediaType ?? null,
-      },
+          body.scheduledPostId ??
+          null,
+      }
     );
+
+    /**
+     * ========================================================
+     * INSERT DUPLICATE
+     * ========================================================
+     */
 
     const {
       data: duplicated,
       error: duplicateError,
     } = await admin
       .from("instagram_automations")
-      .insert(duplicateAutomation)
-      .select(
-        `
-        id,
-        user_id,
-        name,
-        instagram_account_id,
-        instagram_post_id,
-        trigger_type,
-        trigger_keyword,
-        trigger_keywords,
-        dm_message,
-        is_active,
-        created_at,
-        updated_at,
-        button_name,
-        button_url,
-        reply_enabled,
-        reply_text
-        `,
+      .insert(
+        duplicateAutomation
       )
+      .select("*")
       .single();
 
-    if (
-      duplicateError ||
-      !duplicated
-    ) {
+    if (duplicateError) {
       console.error(
         "INSTAGRAM AUTOMATION DUPLICATE DATABASE ERROR:",
-        duplicateError,
+        duplicateError
       );
 
       return NextResponse.json(
         {
           error:
-            duplicateError?.message ||
-            "Failed to duplicate automation.",
+            duplicateError.message,
         },
-        { status: 500 },
-      );
-    }
-
-    /*
-     * ----------------------------------------------------------
-     * Safety check:
-     *
-     * A scheduler automation must NEVER contain an Instagram
-     * post ID.
-     * ----------------------------------------------------------
-     */
-    if (
-      isSchedulerDuplicate &&
-      duplicated.instagram_post_id !== null
-    ) {
-      console.error(
-        "SCHEDULER DUPLICATE HAS UNEXPECTED INSTAGRAM POST ID:",
         {
-          automationId: duplicated.id,
-          instagramPostId:
-            duplicated.instagram_post_id,
-        },
-      );
-
-      await admin
-        .from("instagram_automations")
-        .delete()
-        .eq("id", duplicated.id)
-        .eq("user_id", user.id);
-
-      return NextResponse.json(
-        {
-          error:
-            "Scheduler automation was created with an Instagram post. Creation was rolled back.",
-        },
-        { status: 500 },
+          status: 500,
+        }
       );
     }
 
@@ -829,42 +684,29 @@ export async function POST(
       "INSTAGRAM AUTOMATION DUPLICATED:",
       {
         originalAutomationId:
-          originalAutomation.id,
+          id,
 
         newAutomationId:
           duplicated.id,
 
         name:
-          duplicated.name,
+          duplicateName,
 
         accountId:
-          duplicated.instagram_account_id,
-
-        instagramPostId:
-          duplicated.instagram_post_id,
+          account.id,
 
         source:
           isSchedulerDuplicate
             ? "scheduler"
             : "automation_page",
-      },
+      }
     );
 
-    /*
-     * ----------------------------------------------------------
-     * SchedulerClient expects:
-     *
-     * result.data.id
-     *
-     * ----------------------------------------------------------
-     */
     return NextResponse.json(
       {
         success: true,
 
         data: duplicated,
-
-        automation: duplicated,
 
         meta: {
           source:
@@ -873,27 +715,29 @@ export async function POST(
               : "automation_page",
 
           name:
-            duplicated.name,
+            duplicateName,
 
           scheduledPostId:
-            body.scheduledPostId ?? null,
+            body.scheduledPostId ??
+            null,
 
           scheduledMediaUrl:
-            body.scheduledMediaUrl ?? null,
+            body.scheduledMediaUrl ??
+            null,
 
           scheduledMediaType:
-            body.scheduledMediaType ?? null,
-
-          instagramPostId:
-            duplicated.instagram_post_id,
+            body.scheduledMediaType ??
+            null,
         },
       },
-      { status: 201 },
+      {
+        status: 201,
+      }
     );
   } catch (error) {
     console.error(
       "INSTAGRAM AUTOMATION DUPLICATE EXCEPTION:",
-      error,
+      error
     );
 
     return NextResponse.json(
@@ -903,7 +747,9 @@ export async function POST(
             ? error.message
             : "Failed to duplicate automation",
       },
-      { status: 500 },
+      {
+        status: 500,
+      }
     );
   }
 }
@@ -924,6 +770,552 @@ export async function PATCH(
 ) {
   try {
     const { id } = await context.params;
+
+    /**
+     * Scheduler PATCH dispatch.
+     * SchedulerClient sends /api/scheduler/[id], where [id] is a
+     * scheduled_posts.id, not an instagram_automations.id.
+     */
+    let schedulerPatchBody: Record<string, unknown> | null = null;
+
+    try {
+      schedulerPatchBody = await request.clone().json();
+    } catch {
+      schedulerPatchBody = null;
+    }
+
+    const isScheduledPostPatch =
+      schedulerPatchBody !== null &&
+      (
+        schedulerPatchBody?.source === "scheduler" ||
+        schedulerPatchBody?.schedulerMode === true ||
+        "scheduledAt" in schedulerPatchBody ||
+        "mediaUrl" in schedulerPatchBody ||
+        "automationEnabled" in schedulerPatchBody
+      );
+
+    if (isScheduledPostPatch) {
+      try {
+        const supabase = await createClient();
+
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+
+        if (authError) {
+          console.error(
+            "SCHEDULER PATCH AUTH ERROR:",
+            authError,
+          );
+
+          return NextResponse.json(
+            {
+              error: "Authentication failed.",
+              details: authError.message,
+            },
+            { status: 401 },
+          );
+        }
+
+        if (!user) {
+          return NextResponse.json(
+            { error: "Unauthorized" },
+            { status: 401 },
+          );
+        }
+
+        const admin = createAdminClient();
+
+        /*
+         * Load the scheduled post first.
+         */
+        const {
+          data: existingScheduledPost,
+          error: scheduledFindError,
+        } = await admin
+          .from("scheduled_posts")
+          .select(
+            `
+            id,
+            user_id,
+            instagram_account_id,
+            media_url,
+            media_type,
+            post_type,
+            caption,
+            scheduled_at,
+            timezone,
+            automation_enabled,
+            automation_id,
+            status,
+            instagram_media_id,
+            published_at,
+            error_message,
+            created_at
+            `,
+          )
+          .eq("id", id)
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (scheduledFindError) {
+          console.error(
+            "SCHEDULER PATCH FIND ERROR:",
+            scheduledFindError,
+          );
+
+          return NextResponse.json(
+            {
+              error: "Could not load scheduled post.",
+              details: scheduledFindError.message,
+            },
+            { status: 500 },
+          );
+        }
+
+        if (!existingScheduledPost) {
+          return NextResponse.json(
+            {
+              error: "Scheduled post not found.",
+            },
+            { status: 404 },
+          );
+        }
+
+        /*
+         * Published/publishing posts should not be edited.
+         */
+        if (
+          existingScheduledPost.status === "published" ||
+          existingScheduledPost.status === "publishing"
+        ) {
+          return NextResponse.json(
+            {
+              error:
+                "Published or currently publishing posts cannot be edited.",
+            },
+            { status: 409 },
+          );
+        }
+
+        const body = schedulerPatchBody ?? {};
+
+        /*
+         * --------------------------------------------------------
+         * BUILD SCHEDULED POST UPDATE
+         * --------------------------------------------------------
+         */
+        const scheduledUpdates: Record<string, unknown> = {};
+
+        if ("mediaUrl" in body) {
+          const mediaUrl =
+            typeof body.mediaUrl === "string"
+              ? body.mediaUrl.trim()
+              : "";
+
+          if (!mediaUrl) {
+            return NextResponse.json(
+              {
+                error: "Media URL is required.",
+              },
+              { status: 400 },
+            );
+          }
+
+          scheduledUpdates.media_url = mediaUrl;
+        }
+
+        if ("mediaType" in body) {
+          const mediaType =
+            typeof body.mediaType === "string"
+              ? body.mediaType.trim().toLowerCase()
+              : "";
+
+          if (
+            mediaType !== "image" &&
+            mediaType !== "video"
+          ) {
+            return NextResponse.json(
+              {
+                error:
+                  "Invalid media type. Use image or video.",
+              },
+              { status: 400 },
+            );
+          }
+
+          scheduledUpdates.media_type = mediaType;
+        }
+
+        if ("postType" in body) {
+          const postType =
+            typeof body.postType === "string"
+              ? body.postType.trim().toLowerCase()
+              : "";
+
+          if (
+            postType !== "post" &&
+            postType !== "reel"
+          ) {
+            return NextResponse.json(
+              {
+                error:
+                  "Invalid post type. Use post or reel.",
+              },
+              { status: 400 },
+            );
+          }
+
+          scheduledUpdates.post_type = postType;
+        }
+
+        if ("caption" in body) {
+          scheduledUpdates.caption =
+            typeof body.caption === "string"
+              ? body.caption
+              : body.caption == null
+                ? null
+                : String(body.caption);
+        }
+
+        if ("timezone" in body) {
+          const timezone =
+            typeof body.timezone === "string"
+              ? body.timezone.trim()
+              : "";
+
+          if (timezone) {
+            scheduledUpdates.timezone = timezone;
+          }
+        }
+
+        if ("scheduledAt" in body) {
+          const scheduledAt =
+            typeof body.scheduledAt === "string"
+              ? body.scheduledAt.trim()
+              : "";
+
+          if (!scheduledAt) {
+            return NextResponse.json(
+              {
+                error:
+                  "Scheduled date and time is required.",
+              },
+              { status: 400 },
+            );
+          }
+
+          const parsedDate = new Date(scheduledAt);
+
+          if (
+            Number.isNaN(parsedDate.getTime())
+          ) {
+            return NextResponse.json(
+              {
+                error:
+                  "Invalid scheduled date and time.",
+              },
+              { status: 400 },
+            );
+          }
+
+          if (
+            parsedDate.getTime() <=
+            Date.now() + 30_000
+          ) {
+            return NextResponse.json(
+              {
+                error:
+                  "Please select a future date and time.",
+              },
+              { status: 400 },
+            );
+          }
+
+          scheduledUpdates.scheduled_at =
+            parsedDate.toISOString();
+        }
+
+        /*
+         * --------------------------------------------------------
+         * AUTOMATION
+         * --------------------------------------------------------
+         *
+         * Editing a scheduled post must not require an existing
+         * automation to be selected again.
+         *
+         * Same automation ID:
+         *   keep it without re-querying.
+         *
+         * Different automation ID:
+         *   verify it belongs to this user/account.
+         *
+         * Automation OFF:
+         *   clear the relationship.
+         */
+        if ("automationEnabled" in body) {
+          const automationEnabled =
+            body.automationEnabled === true;
+
+          scheduledUpdates.automation_enabled =
+            automationEnabled;
+
+          if (!automationEnabled) {
+            scheduledUpdates.automation_id = null;
+          } else {
+            const requestedAutomationId =
+              typeof body.automationId === "string"
+                ? body.automationId.trim()
+                : "";
+
+            if (!requestedAutomationId) {
+              return NextResponse.json(
+                {
+                  error:
+                    "Automation ID is required when automation is enabled.",
+                },
+                { status: 400 },
+              );
+            }
+
+            if (
+              requestedAutomationId ===
+              existingScheduledPost.automation_id
+            ) {
+              /*
+               * This is the normal Edit case.
+               * Keep the existing relationship.
+               */
+              scheduledUpdates.automation_id =
+                existingScheduledPost.automation_id;
+            } else {
+              /*
+               * The user selected a different automation.
+               */
+              const {
+                data: automation,
+                error: automationError,
+              } = await admin
+                .from("instagram_automations")
+                .select("id")
+                .eq(
+                  "id",
+                  requestedAutomationId,
+                )
+                .eq(
+                  "user_id",
+                  user.id,
+                )
+                .eq(
+                  "instagram_account_id",
+                  existingScheduledPost.instagram_account_id,
+                )
+                .maybeSingle();
+
+              if (automationError) {
+                console.error(
+                  "SCHEDULER PATCH AUTOMATION CHECK ERROR:",
+                  automationError,
+                );
+
+                return NextResponse.json(
+                  {
+                    error:
+                      "Could not verify automation.",
+                    details:
+                      automationError.message,
+                  },
+                  { status: 500 },
+                );
+              }
+
+              if (!automation) {
+                return NextResponse.json(
+                  {
+                    error:
+                      "Automation not found or does not belong to this Instagram account.",
+                  },
+                  { status: 404 },
+                );
+              }
+
+              scheduledUpdates.automation_id =
+                automation.id;
+            }
+          }
+        }
+
+        /*
+         * Optional direct status update. Keep the same safety
+         * rules as DELETE.
+         */
+        if ("status" in body) {
+          const requestedStatus =
+            typeof body.status === "string"
+              ? body.status.trim().toLowerCase()
+              : "";
+
+          if (
+            requestedStatus === "cancelled"
+          ) {
+            scheduledUpdates.status =
+              "cancelled";
+          } else if (
+            requestedStatus &&
+            requestedStatus !==
+              existingScheduledPost.status
+          ) {
+            return NextResponse.json(
+              {
+                error:
+                  "Invalid scheduled post status update.",
+              },
+              { status: 400 },
+            );
+          }
+        }
+
+        if (
+          Object.keys(scheduledUpdates).length ===
+          0
+        ) {
+          return NextResponse.json(
+            {
+              error:
+                "Nothing to update.",
+            },
+            { status: 400 },
+          );
+        }
+
+        console.log(
+          "UPDATING SCHEDULED POST:",
+          {
+            scheduledPostId: id,
+            userId: user.id,
+            existingAutomationId:
+              existingScheduledPost.automation_id,
+            requestedAutomationId:
+              body.automationId ?? null,
+            automationEnabled:
+              body.automationEnabled ?? null,
+            updates: scheduledUpdates,
+          },
+        );
+
+        const {
+          data: updatedScheduledPost,
+          error: updateScheduledError,
+        } = await admin
+          .from("scheduled_posts")
+          .update(scheduledUpdates)
+          .eq("id", id)
+          .eq("user_id", user.id)
+          .select(
+            `
+            id,
+            user_id,
+            instagram_account_id,
+            media_url,
+            media_type,
+            post_type,
+            caption,
+            scheduled_at,
+            timezone,
+            automation_enabled,
+            automation_id,
+            status,
+            instagram_media_id,
+            published_at,
+            error_message,
+            created_at
+            `,
+          )
+          .single();
+
+        if (updateScheduledError) {
+          console.error(
+            "SCHEDULED POST UPDATE ERROR:",
+            updateScheduledError,
+          );
+
+          return NextResponse.json(
+            {
+              error:
+                "Failed to update scheduled post.",
+              details:
+                updateScheduledError.message,
+              code:
+                updateScheduledError.code ?? null,
+            },
+            { status: 500 },
+          );
+        }
+
+        if (!updatedScheduledPost) {
+          return NextResponse.json(
+            {
+              error:
+                "Scheduled post could not be updated.",
+            },
+            { status: 404 },
+          );
+        }
+
+        /*
+         * Never return an invalid scheduled_at value.
+         */
+        if (
+          typeof updatedScheduledPost.scheduled_at !==
+            "string" ||
+          Number.isNaN(
+            new Date(
+              updatedScheduledPost.scheduled_at,
+            ).getTime(),
+          )
+        ) {
+          console.error(
+            "INVALID SCHEDULED DATE AFTER UPDATE:",
+            updatedScheduledPost,
+          );
+
+          return NextResponse.json(
+            {
+              error:
+                "Scheduled post was updated, but the server returned an invalid scheduled date.",
+            },
+            { status: 500 },
+          );
+        }
+
+        return NextResponse.json(
+          {
+            success: true,
+            post: updatedScheduledPost,
+            data: updatedScheduledPost,
+          },
+          { status: 200 },
+        );
+      
+      } catch (error) {
+        console.error(
+          "SCHEDULED POST PATCH EXCEPTION:",
+          error,
+        );
+
+        return NextResponse.json(
+          {
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to update scheduled post.",
+          },
+          { status: 500 },
+        );
+      }
+    }
+
 
     const supabase = await createClient();
 
@@ -1633,147 +2025,176 @@ export async function DELETE(
   _request: NextRequest,
   context: {
     params: Promise<{ id: string }>;
-  }
+  },
 ) {
   try {
-    const { id } =
-      await context.params;
+    const { id } = await context.params;
 
-    const supabase =
-      await createClient();
+    if (!id) {
+      return NextResponse.json(
+        { error: "Scheduled post ID is required." },
+        { status: 400 },
+      );
+    }
+
+    const supabase = await createClient();
 
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser();
+
+    if (authError) {
+      console.error("SCHEDULER DELETE AUTH ERROR:", authError);
+      return NextResponse.json(
+        {
+          error: "Authentication failed.",
+          details: authError.message,
+        },
+        { status: 401 },
+      );
+    }
 
     if (!user) {
       return NextResponse.json(
-        {
-          error: "Unauthorized",
-        },
-        {
-          status: 401,
-        }
+        { error: "Unauthorized" },
+        { status: 401 },
       );
     }
 
-    const account =
-      await getAccount(user.id);
+    const admin = createAdminClient();
 
-    if (!account) {
-      return NextResponse.json(
-        {
-          error:
-            "Instagram account not found",
-        },
-        {
-          status: 404,
-        }
-      );
-    }
-
-    const admin =
-      createAdminClient();
-
-    /**
-     * ========================================================
-     * VERIFY AUTOMATION
-     * ========================================================
+    /*
+     * IMPORTANT:
+     * A scheduled post is stored in scheduled_posts.
+     * Deleting it must NOT require an automation to exist.
      */
 
     const {
-      data: automation,
+      data: scheduledPost,
       error: findError,
     } = await admin
-      .from(
-        "instagram_automations"
+      .from("scheduled_posts")
+      .select(
+        `
+        id,
+        user_id,
+        status,
+        automation_id,
+        media_url
+        `,
       )
-      .select("id")
       .eq("id", id)
       .eq("user_id", user.id)
-      .eq(
-        "instagram_account_id",
-        account.id
-      )
       .maybeSingle();
 
     if (findError) {
+      console.error(
+        "SCHEDULER DELETE FIND ERROR:",
+        findError,
+      );
+
       return NextResponse.json(
         {
-          error:
-            findError.message,
+          error: "Could not find scheduled post.",
+          details: findError.message,
+          code: findError.code ?? null,
         },
-        {
-          status: 500,
-        }
+        { status: 500 },
       );
     }
 
-    if (!automation) {
+    if (!scheduledPost) {
       return NextResponse.json(
         {
-          error:
-            "Automation not found",
+          error: "Scheduled post not found.",
         },
-        {
-          status: 404,
-        }
+        { status: 404 },
       );
     }
 
-    /**
-     * ========================================================
-     * DELETE
-     * ========================================================
+    /*
+     * Never delete a post that has already been published
+     * or is currently being published.
      */
+    if (
+      scheduledPost.status === "published" ||
+      scheduledPost.status === "publishing"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Published or currently publishing posts cannot be deleted.",
+        },
+        { status: 409 },
+      );
+    }
 
+    /*
+     * Delete ONLY the scheduled_posts row.
+     *
+     * Do not look up or delete instagram_automations here.
+     * The automation can be reused independently.
+     */
     const {
+      data: deletedPost,
       error: deleteError,
     } = await admin
-      .from(
-        "instagram_automations"
-      )
+      .from("scheduled_posts")
       .delete()
       .eq("id", id)
       .eq("user_id", user.id)
-      .eq(
-        "instagram_account_id",
-        account.id
-      );
+      .select("id")
+      .maybeSingle();
 
     if (deleteError) {
       console.error(
-        "INSTAGRAM AUTOMATION DELETE ERROR:",
-        deleteError
+        "SCHEDULER DELETE POST ERROR:",
+        deleteError,
       );
 
       return NextResponse.json(
         {
-          error:
-            deleteError.message,
+          error: "Failed to delete scheduled post.",
+          details: deleteError.message,
+          code: deleteError.code ?? null,
+          hint: deleteError.hint ?? null,
         },
+        { status: 500 },
+      );
+    }
+
+    if (!deletedPost) {
+      return NextResponse.json(
         {
-          status: 500,
-        }
+          error:
+            "Scheduled post could not be deleted or was already deleted.",
+        },
+        { status: 404 },
       );
     }
 
     console.log(
-      "INSTAGRAM AUTOMATION DELETED:",
+      "SCHEDULED POST DELETED:",
       {
-        automationId: id,
-        accountId:
-          account.id,
-      }
+        scheduledPostId: id,
+        userId: user.id,
+        automationId:
+          scheduledPost.automation_id ?? null,
+      },
     );
 
-    return NextResponse.json({
-      success: true,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        deletedId: id,
+      },
+      { status: 200 },
+    );
   } catch (error) {
     console.error(
-      "INSTAGRAM AUTOMATION DELETE EXCEPTION:",
-      error
+      "SCHEDULER DELETE EXCEPTION:",
+      error,
     );
 
     return NextResponse.json(
@@ -1781,11 +2202,9 @@ export async function DELETE(
         error:
           error instanceof Error
             ? error.message
-            : "Failed to delete automation",
+            : "Failed to delete scheduled post.",
       },
-      {
-        status: 500,
-      }
+      { status: 500 },
     );
   }
 }

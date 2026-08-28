@@ -16,6 +16,11 @@ const navigation = [
     icon: "▣",
   },
   {
+    name: "Scheduler",
+    href: "/dashboard/scheduler",
+    icon: "◷",
+  },
+  {
     name: "Automations",
     href: "/dashboard/automations",
     icon: "⚡",

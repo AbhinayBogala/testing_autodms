@@ -11,6 +11,9 @@ type PageProps = {
   params: Promise<{
     id: string;
   }>;
+  searchParams: Promise<{
+    error?: string;
+  }>;
 };
 
 type InstagramPost = {
@@ -25,27 +28,42 @@ type InstagramPost = {
 
 type Automation = {
   id: string;
+  name: string | null;
+
   user_id: string;
   instagram_account_id: string;
   instagram_post_id: string;
+
   trigger_type: string | null;
   trigger_keywords: string[] | null;
   trigger_keyword: string | null;
+
   dm_message: string;
+
   reply_enabled: boolean | null;
   reply_text: string | null;
   reply_texts: string[] | null;
+
   button_name: string | null;
   button_url: string | null;
+
   is_active: boolean;
 };
 
 export default async function EditAutomationPage({
   params,
+  searchParams,
 }: PageProps) {
   const { id } = await params;
+  const query = await searchParams;
 
   const supabase = await createClient();
+
+  /*
+   * =========================================================
+   * AUTH
+   * =========================================================
+   */
 
   const {
     data: { user },
@@ -86,6 +104,7 @@ export default async function EditAutomationPage({
     .select(
       `
       id,
+      name,
       user_id,
       instagram_account_id,
       instagram_post_id,
@@ -146,10 +165,7 @@ export default async function EditAutomationPage({
   }
 
   /*
-   * TypeScript now knows automation is not null.
-   *
-   * Keep a separate constant so nested/server-action code
-   * doesn't cause "possibly null" narrowing problems.
+   * TypeScript knows automation exists after the check above.
    */
 
   const automationData: Automation = automation;
@@ -219,8 +235,7 @@ export default async function EditAutomationPage({
     if (error) {
       postsError = error.message;
     } else {
-      posts =
-        (data ?? []) as InstagramPost[];
+      posts = (data ?? []) as InstagramPost[];
     }
   }
 
@@ -231,8 +246,7 @@ export default async function EditAutomationPage({
    */
 
   const currentTriggerType =
-    automationData.trigger_type ||
-    "keywords";
+    automationData.trigger_type || "keywords";
 
   const currentKeywords =
     Array.isArray(
@@ -244,22 +258,28 @@ export default async function EditAutomationPage({
         : [];
 
   /*
-   * Current public comment replies.
+   * Public comment replies.
    *
    * New automations use reply_texts.
-   * Existing automations are migrated from the old reply_text field
-   * so they continue to show their current reply.
+   * Older automations may only have reply_text.
    */
+
   const currentReplyTexts =
-    Array.isArray(automationData.reply_texts) &&
+    Array.isArray(
+      automationData.reply_texts
+    ) &&
     automationData.reply_texts.length > 0
       ? automationData.reply_texts.filter(
-          (reply): reply is string =>
+          (
+            reply
+          ): reply is string =>
             typeof reply === "string" &&
             reply.trim().length > 0
         )
       : automationData.reply_text?.trim()
-        ? [automationData.reply_text.trim()]
+        ? [
+            automationData.reply_text.trim(),
+          ]
         : [];
 
   /*
@@ -283,43 +303,81 @@ export default async function EditAutomationPage({
       redirect("/admin/login");
     }
 
-    const instagramPostId =
-      String(
-        formData.get(
-          "instagram_post_id"
-        ) ?? ""
-      ).trim();
+    /*
+     * =======================================================
+     * AUTOMATION NAME
+     * =======================================================
+     */
 
-    const triggerType =
-      String(
-        formData.get(
-          "trigger_type"
-        ) ?? "keywords"
-      ).trim();
+    const automationName = String(
+      formData.get("name") ?? ""
+    ).trim();
 
-    const rawKeywords =
-      String(
-        formData.get(
-          "trigger_keywords"
-        ) ?? ""
+    if (!automationName) {
+      redirect(
+        `/dashboard/automations/${id}/edit?error=Please+enter+an+automation+name.`
       );
+    }
 
-    const dmMessage =
-      String(
-        formData.get(
-          "dm_message"
-        ) ?? ""
-      ).trim();
-
-    const replyEnabled =
-      formData.get("reply_enabled") === "on";
+    if (automationName.length > 100) {
+      redirect(
+        `/dashboard/automations/${id}/edit?error=Automation+name+must+be+100+characters+or+less.`
+      );
+    }
 
     /*
-     * Read all public reply fields.
-     *
-     * ReplyFieldsEditor submits each textarea with the same
-     * name: reply_texts.
+     * =======================================================
+     * INSTAGRAM POST
+     * =======================================================
      */
+
+    const instagramPostId = String(
+      formData.get(
+        "instagram_post_id"
+      ) ?? ""
+    ).trim();
+
+    /*
+     * =======================================================
+     * TRIGGER
+     * =======================================================
+     */
+
+    const triggerType = String(
+      formData.get(
+        "trigger_type"
+      ) ?? "keywords"
+    ).trim();
+
+    const rawKeywords = String(
+      formData.get(
+        "trigger_keywords"
+      ) ?? ""
+    );
+
+    /*
+     * =======================================================
+     * DM MESSAGE
+     * =======================================================
+     */
+
+    const dmMessage = String(
+      formData.get(
+        "dm_message"
+      ) ?? ""
+    ).trim();
+
+    /*
+     * =======================================================
+     * PUBLIC REPLY
+     * =======================================================
+     */
+
+    const replyEnabled =
+      formData.get(
+        "reply_enabled"
+      ) === "on";
+
     const replyTexts = Array.from(
       new Set(
         formData
@@ -332,30 +390,35 @@ export default async function EditAutomationPage({
     );
 
     /*
-     * Keep reply_text populated with the first reply for
-     * backward compatibility with older code.
+     * Keep first reply in legacy column.
      */
+
     const replyText =
       replyTexts[0] ?? "";
 
-    const buttonName =
-      String(
-        formData.get(
-          "button_name"
-        ) ?? ""
-      ).trim();
+    /*
+     * =======================================================
+     * CUSTOM BUTTON
+     * =======================================================
+     */
 
-    const buttonUrl =
-      String(
-        formData.get(
-          "button_url"
-        ) ?? ""
-      ).trim();
+    const buttonName = String(
+      formData.get(
+        "button_name"
+      ) ?? ""
+    ).trim();
 
-    console.log("EDIT DM BUTTON DATA:", {
-      buttonName,
-      buttonUrl,
-    });
+    const buttonUrl = String(
+      formData.get(
+        "button_url"
+      ) ?? ""
+    ).trim();
+
+    /*
+     * =======================================================
+     * STATUS
+     * =======================================================
+     */
 
     const isActive =
       formData.get(
@@ -363,7 +426,9 @@ export default async function EditAutomationPage({
       ) === "on";
 
     /*
-     * Normalize keywords.
+     * =======================================================
+     * NORMALIZE KEYWORDS
+     * =======================================================
      */
 
     const triggerKeywords =
@@ -381,7 +446,9 @@ export default async function EditAutomationPage({
       );
 
     /*
-     * Validation.
+     * =======================================================
+     * VALIDATION
+     * =======================================================
      */
 
     if (!instagramPostId) {
@@ -391,10 +458,8 @@ export default async function EditAutomationPage({
     }
 
     if (
-      triggerType !==
-        "keywords" &&
-      triggerType !==
-        "any_comment"
+      triggerType !== "keywords" &&
+      triggerType !== "any_comment"
     ) {
       redirect(
         `/dashboard/automations/${id}/edit?error=Invalid+trigger+type.`
@@ -402,8 +467,7 @@ export default async function EditAutomationPage({
     }
 
     if (
-      triggerType ===
-        "keywords" &&
+      triggerType === "keywords" &&
       triggerKeywords.length === 0
     ) {
       redirect(
@@ -418,8 +482,12 @@ export default async function EditAutomationPage({
     }
 
     /*
-     * Make sure the selected post belongs
-     * to this automation's Instagram account.
+     * =======================================================
+     * VERIFY SELECTED POST
+     * =======================================================
+     *
+     * The post must belong to the same Instagram account
+     * already connected to this automation.
      */
 
     const {
@@ -459,19 +527,42 @@ export default async function EditAutomationPage({
     }
 
     /*
-     * Keep the old trigger_keyword column populated
-     * for backward compatibility with the current webhook.
+     * =======================================================
+     * LEGACY KEYWORD
+     * =======================================================
+     *
+     * Your webhook still supports the older
+     * trigger_keyword column.
      */
 
     const legacyKeyword =
-      triggerType ===
-      "keywords"
+      triggerType === "keywords"
         ? triggerKeywords[0] ?? ""
         : "";
 
     /*
-     * Update automation.
+     * =======================================================
+     * UPDATE
+     * =======================================================
      */
+
+    console.log(
+      "UPDATING INSTAGRAM AUTOMATION:",
+      {
+        id,
+        name: automationName,
+        instagramPostId: post.id,
+        instagramMediaId:
+          post.instagram_media_id,
+        triggerType,
+        triggerKeywords,
+        replyEnabled,
+        replyTexts,
+        buttonName,
+        buttonUrl,
+        isActive,
+      }
+    );
 
     const {
       error: updateError,
@@ -480,9 +571,20 @@ export default async function EditAutomationPage({
         "instagram_automations"
       )
       .update({
+        /*
+         * NEW AUTOMATION NAME
+         */
+        name: automationName,
+
+        /*
+         * POST
+         */
         instagram_post_id:
           post.id,
 
+        /*
+         * TRIGGER
+         */
         trigger_type:
           triggerType,
 
@@ -492,54 +594,72 @@ export default async function EditAutomationPage({
         trigger_keyword:
           legacyKeyword,
 
+        /*
+         * DM
+         */
         dm_message:
           dmMessage,
 
+        /*
+         * PUBLIC REPLY
+         */
         reply_enabled:
           replyEnabled,
 
-        /*
-         * Store all replies for the new rotating-reply system.
-         * Keep reply_text as the first reply for backward compatibility.
-         */
         reply_text:
-          replyEnabled && replyText
+          replyEnabled &&
+          replyText
             ? replyText
             : null,
 
         reply_texts:
-          replyEnabled && replyTexts.length > 0
+          replyEnabled &&
+          replyTexts.length > 0
             ? replyTexts
             : [],
 
+        /*
+         * CUSTOM BUTTON
+         */
         button_name:
-          buttonName.trim() || null,
+          buttonName || null,
 
         button_url:
-          buttonUrl.trim() || null,
+          buttonUrl || null,
 
+        /*
+         * STATUS
+         */
         is_active:
           isActive,
 
+        /*
+         * TIMESTAMP
+         */
         updated_at:
           new Date().toISOString(),
       })
-      .eq(
-        "id",
-        id
-      )
-      .eq(
-        "user_id",
-        user.id
-      );
+      .eq("id", id)
+      .eq("user_id", user.id);
 
     if (updateError) {
+      console.error(
+        "UPDATE AUTOMATION ERROR:",
+        updateError
+      );
+
       redirect(
         `/dashboard/automations/${id}/edit?error=${encodeURIComponent(
           updateError.message
         )}`
       );
     }
+
+    /*
+     * =======================================================
+     * SUCCESS
+     * =======================================================
+     */
 
     redirect(
       "/dashboard/automations"
@@ -554,18 +674,28 @@ export default async function EditAutomationPage({
 
   return (
     <main className="min-h-screen bg-[#050505] text-white">
+
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
+
       <header className="border-b border-white/[0.06] bg-[#070707]">
         <div className="mx-auto max-w-5xl px-6 py-7">
+
           <Link
             href="/dashboard/automations"
             className="inline-flex items-center gap-2 text-xs font-medium text-gray-600 transition-colors hover:text-white"
           >
-            <span className="text-base">←</span>
+            <span className="text-base">
+              ←
+            </span>
+
             Back to Automations
           </Link>
 
           <div className="mt-4 flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-[#ff1744]" />
+
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-600">
               DevilX / Automation Engine
             </p>
@@ -581,23 +711,56 @@ export default async function EditAutomationPage({
         </div>
       </header>
 
+      {/* =====================================================
+          CONTENT
+      ===================================================== */}
+
       <div className="mx-auto max-w-3xl px-6 py-9">
+
+        {/* ===================================================
+            ERROR
+        =================================================== */}
+
+        {query.error && (
+          <div className="mb-6 rounded-[22px] border border-red-500/15 bg-red-500/[0.05] p-5">
+            <h2 className="font-semibold text-red-300">
+              Unable to save automation
+            </h2>
+
+            <p className="mt-2 text-sm text-red-200/60">
+              {decodeURIComponent(
+                query.error
+              )}
+            </p>
+          </div>
+        )}
+
+        {/* ===================================================
+            ACCOUNT ERROR
+        =================================================== */}
+
         {accountError && (
           <div className="mb-6 rounded-[22px] border border-red-500/15 bg-red-500/[0.05] p-5">
             <h2 className="font-semibold text-red-300">
               Instagram account error
             </h2>
+
             <p className="mt-2 text-sm text-red-200/60">
               {accountError.message}
             </p>
           </div>
         )}
 
+        {/* ===================================================
+            POSTS ERROR
+        =================================================== */}
+
         {postsError && (
           <div className="mb-6 rounded-[22px] border border-red-500/15 bg-red-500/[0.05] p-5">
             <h2 className="font-semibold text-red-300">
               Posts error
             </h2>
+
             <p className="mt-2 text-sm text-red-200/60">
               {postsError}
             </p>
@@ -605,7 +768,14 @@ export default async function EditAutomationPage({
         )}
 
         {!account ? (
+          /*
+           * =================================================
+           * ACCOUNT NOT AVAILABLE
+           * =================================================
+           */
+
           <div className="rounded-[26px] border border-yellow-500/15 bg-yellow-500/[0.04] p-8">
+
             <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-yellow-500/10 bg-yellow-500/[0.06] text-yellow-300">
               !
             </div>
@@ -615,8 +785,8 @@ export default async function EditAutomationPage({
             </h2>
 
             <p className="mt-2 max-w-lg text-sm leading-6 text-yellow-100/50">
-              The Instagram account connected to this automation is no longer
-              active.
+              The Instagram account connected to this automation
+              is no longer active.
             </p>
 
             <Link
@@ -627,17 +797,68 @@ export default async function EditAutomationPage({
             </Link>
           </div>
         ) : (
+          /*
+           * =================================================
+           * FORM
+           * =================================================
+           */
+
           <form
             action={updateAutomation}
             className="rounded-[28px] border border-white/[0.07] bg-[#0a0a0a] p-6 shadow-2xl shadow-black/30 sm:p-8"
           >
-            {/* ACCOUNT */}
+
+            {/* =================================================
+                AUTOMATION NAME
+            ================================================= */}
+
+            <div>
+              <SectionHeading
+                number="00"
+                title="Automation Name"
+                description="Give this automation a name so you can easily identify it in the Scheduler."
+              />
+
+              <label
+                htmlFor="name"
+                className="mb-2 mt-5 block text-sm font-medium"
+              >
+                Name
+              </label>
+
+              <input
+                id="name"
+                name="name"
+                required
+                maxLength={100}
+                defaultValue={
+                  automationData.name ?? ""
+                }
+                placeholder="Course Launch Comments"
+                className="w-full rounded-xl border border-white/[0.08] bg-[#070707] px-4 py-3 text-sm text-white outline-none placeholder:text-gray-700 focus:border-[#ff1744]/40"
+              />
+
+              <p className="mt-2 text-xs text-gray-700">
+                Example: Course Launch Comments,
+                Webinar Leads, Product Enquiry
+              </p>
+            </div>
+
+            <Divider />
+
+            {/* =================================================
+                ACCOUNT
+            ================================================= */}
 
             <div className="rounded-[22px] border border-emerald-500/10 bg-emerald-500/[0.045] p-5">
+
               <div className="flex items-center gap-3">
+
                 {account.profile_picture_url ? (
                   <img
-                    src={account.profile_picture_url}
+                    src={
+                      account.profile_picture_url
+                    }
                     alt=""
                     className="h-11 w-11 rounded-full object-cover ring-2 ring-white/[0.06]"
                   />
@@ -653,12 +874,14 @@ export default async function EditAutomationPage({
                   </p>
 
                   <p className="mt-1 font-semibold text-emerald-100">
-                    @{account.username || "Instagram account"}
+                    @{account.username ||
+                      "Instagram account"}
                   </p>
                 </div>
 
                 <div className="ml-auto flex items-center gap-2 rounded-full border border-emerald-500/10 bg-emerald-500/[0.06] px-3 py-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+
                   <span className="text-[10px] font-medium text-emerald-400">
                     Connected
                   </span>
@@ -666,9 +889,12 @@ export default async function EditAutomationPage({
               </div>
             </div>
 
-            {/* POST */}
+            {/* =================================================
+                POST
+            ================================================= */}
 
             <div className="mt-9">
+
               <SectionHeading
                 number="01"
                 title="Instagram Post"
@@ -680,7 +906,8 @@ export default async function EditAutomationPage({
                 initialPost={
                   posts.find(
                     (post) =>
-                      post.id === automationData.instagram_post_id
+                      post.id ===
+                      automationData.instagram_post_id
                   ) ?? null
                 }
               />
@@ -688,9 +915,12 @@ export default async function EditAutomationPage({
 
             <Divider />
 
-            {/* TRIGGER */}
+            {/* =================================================
+                TRIGGER
+            ================================================= */}
 
             <div>
+
               <SectionHeading
                 number="02"
                 title="Trigger"
@@ -698,12 +928,19 @@ export default async function EditAutomationPage({
               />
 
               <div className="mt-5 space-y-3">
+
+                {/* KEYWORDS */}
+
                 <label className="group flex cursor-pointer items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 transition-colors hover:border-[#ff1744]/20 hover:bg-[#ff1744]/[0.02]">
+
                   <input
                     type="radio"
                     name="trigger_type"
                     value="keywords"
-                    defaultChecked={currentTriggerType === "keywords"}
+                    defaultChecked={
+                      currentTriggerType ===
+                      "keywords"
+                    }
                     className="mt-1 h-4 w-4 accent-[#ff1744]"
                   />
 
@@ -713,17 +950,24 @@ export default async function EditAutomationPage({
                     </p>
 
                     <p className="mt-1 text-xs leading-5 text-gray-600">
-                      Trigger when a comment contains any configured keyword.
+                      Trigger when a comment contains
+                      any configured keyword.
                     </p>
                   </div>
                 </label>
 
+                {/* ANY COMMENT */}
+
                 <label className="group flex cursor-pointer items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 transition-colors hover:border-[#ff1744]/20 hover:bg-[#ff1744]/[0.02]">
+
                   <input
                     type="radio"
                     name="trigger_type"
                     value="any_comment"
-                    defaultChecked={currentTriggerType === "any_comment"}
+                    defaultChecked={
+                      currentTriggerType ===
+                      "any_comment"
+                    }
                     className="mt-1 h-4 w-4 accent-[#ff1744]"
                   />
 
@@ -733,7 +977,8 @@ export default async function EditAutomationPage({
                     </p>
 
                     <p className="mt-1 text-xs leading-5 text-gray-600">
-                      Trigger for every comment on the selected post.
+                      Trigger for every comment on the
+                      selected post.
                     </p>
                   </div>
                 </label>
@@ -751,7 +996,9 @@ export default async function EditAutomationPage({
                 name="trigger_keywords"
                 rows={4}
                 maxLength={1000}
-                defaultValue={currentKeywords.join(", ")}
+                defaultValue={
+                  currentKeywords.join(", ")
+                }
                 placeholder="link, price, details"
                 className="w-full resize-y rounded-xl border border-white/[0.08] bg-[#070707] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-700 focus:border-[#ff1744]/40"
               />
@@ -763,9 +1010,12 @@ export default async function EditAutomationPage({
 
             <Divider />
 
-            {/* MESSAGE */}
+            {/* =================================================
+                DM MESSAGE
+            ================================================= */}
 
             <div>
+
               <SectionHeading
                 number="03"
                 title="DM Message"
@@ -777,14 +1027,20 @@ export default async function EditAutomationPage({
                 required
                 rows={7}
                 maxLength={2000}
-                defaultValue={automationData.dm_message}
+                defaultValue={
+                  automationData.dm_message
+                }
                 className="mt-5 w-full resize-y rounded-xl border border-white/[0.08] bg-[#070707] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-700 focus:border-[#ff1744]/40"
               />
 
-              {/* PUBLIC REPLY */}
+              {/* =================================================
+                  PUBLIC REPLY
+              ================================================= */}
 
               <div className="mt-6 rounded-[22px] border border-white/[0.07] bg-white/[0.02] p-5">
+
                 <label className="flex items-center justify-between gap-4">
+
                   <div>
                     <p className="font-medium">
                       Reply to Comment
@@ -798,20 +1054,29 @@ export default async function EditAutomationPage({
                   <input
                     type="checkbox"
                     name="reply_enabled"
-                    defaultChecked={automationData.reply_enabled ?? false}
+                    defaultChecked={
+                      automationData.reply_enabled ??
+                      false
+                    }
                     className="h-5 w-5 accent-[#ff1744]"
                   />
                 </label>
 
                 <ReplyFieldsEditor
-                  initialReplies={currentReplyTexts}
+                  initialReplies={
+                    currentReplyTexts
+                  }
                 />
               </div>
 
-              {/* CUSTOM BUTTON */}
+              {/* =================================================
+                  CUSTOM BUTTON
+              ================================================= */}
 
               <div className="mt-6 rounded-[22px] border border-white/[0.07] bg-white/[0.02] p-5">
+
                 <div className="mb-5 flex items-center gap-2">
+
                   <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ff1744]/[0.06] text-xs text-[#ff1744]">
                     ↗
                   </span>
@@ -822,13 +1087,18 @@ export default async function EditAutomationPage({
                     </p>
 
                     <p className="text-xs text-gray-600">
-                      Add an optional clickable button to the DM.
+                      Add an optional clickable button to
+                      the DM.
                     </p>
                   </div>
                 </div>
 
                 <div className="space-y-4">
+
+                  {/* BUTTON NAME */}
+
                   <div>
+
                     <label
                       htmlFor="button_name"
                       className="mb-2 block text-sm font-medium"
@@ -839,13 +1109,19 @@ export default async function EditAutomationPage({
                     <input
                       id="button_name"
                       name="button_name"
-                      defaultValue={automationData.button_name ?? ""}
+                      defaultValue={
+                        automationData.button_name ??
+                        ""
+                      }
                       placeholder="Get Course"
                       className="w-full rounded-xl border border-white/[0.08] bg-[#070707] px-4 py-3 text-sm text-white outline-none placeholder:text-gray-700 focus:border-[#ff1744]/40"
                     />
                   </div>
 
+                  {/* BUTTON URL */}
+
                   <div>
+
                     <label
                       htmlFor="button_url"
                       className="mb-2 block text-sm font-medium"
@@ -856,7 +1132,11 @@ export default async function EditAutomationPage({
                     <input
                       id="button_url"
                       name="button_url"
-                      defaultValue={automationData.button_url ?? ""}
+                      type="url"
+                      defaultValue={
+                        automationData.button_url ??
+                        ""
+                      }
                       placeholder="https://example.com"
                       className="w-full rounded-xl border border-white/[0.08] bg-[#070707] px-4 py-3 text-sm text-white outline-none placeholder:text-gray-700 focus:border-[#ff1744]/40"
                     />
@@ -867,9 +1147,12 @@ export default async function EditAutomationPage({
 
             <Divider />
 
-            {/* STATUS */}
+            {/* =================================================
+                STATUS
+            ================================================= */}
 
             <div>
+
               <SectionHeading
                 number="04"
                 title="Status"
@@ -877,28 +1160,35 @@ export default async function EditAutomationPage({
               />
 
               <label className="mt-5 flex cursor-pointer items-center justify-between gap-4 rounded-[22px] border border-white/[0.07] bg-white/[0.02] p-5 transition-colors hover:border-white/[0.11]">
+
                 <div>
                   <p className="text-sm font-medium">
                     Automation active
                   </p>
 
                   <p className="mt-1 text-xs text-gray-600">
-                    Turn this off to temporarily stop the automation.
+                    Turn this off to temporarily stop the
+                    automation.
                   </p>
                 </div>
 
                 <input
                   type="checkbox"
                   name="is_active"
-                  defaultChecked={automationData.is_active}
+                  defaultChecked={
+                    automationData.is_active
+                  }
                   className="h-5 w-5 accent-[#ff1744]"
                 />
               </label>
             </div>
 
-            {/* ACTIONS */}
+            {/* =================================================
+                ACTIONS
+            ================================================= */}
 
             <div className="mt-10 flex flex-col-reverse gap-3 border-t border-white/[0.06] pt-6 sm:flex-row sm:justify-end">
+
               <Link
                 href="/dashboard/automations"
                 className="inline-flex items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.02] px-6 py-3 text-sm font-medium text-gray-500 transition-colors hover:bg-white/[0.05] hover:text-white"
@@ -920,6 +1210,12 @@ export default async function EditAutomationPage({
   );
 }
 
+/*
+ * ===========================================================
+ * SECTION HEADING
+ * ===========================================================
+ */
+
 function SectionHeading({
   number,
   title,
@@ -932,6 +1228,7 @@ function SectionHeading({
   return (
     <div>
       <div className="flex items-center gap-3">
+
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#ff1744]/[0.06] text-[9px] font-bold text-[#ff1744]">
           {number}
         </span>
@@ -947,6 +1244,12 @@ function SectionHeading({
     </div>
   );
 }
+
+/*
+ * ===========================================================
+ * DIVIDER
+ * ===========================================================
+ */
 
 function Divider() {
   return (

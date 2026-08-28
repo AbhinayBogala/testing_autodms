@@ -8,6 +8,10 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
+/* ============================================================
+   TYPES
+============================================================ */
+
 type InstagramPost = {
   id: string;
   instagram_media_id: string;
@@ -22,13 +26,24 @@ type SearchParams = {
   error?: string;
 };
 
+/* ============================================================
+   PAGE
+============================================================ */
+
 export default async function NewAutomationPage({
   searchParams,
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const params = await searchParams;
-  const supabase = await createClient();
+  const params =
+    await searchParams;
+
+  const supabase =
+    await createClient();
+
+  /* ==========================================================
+     AUTHENTICATION
+  ========================================================== */
 
   const {
     data: { user },
@@ -39,6 +54,7 @@ export default async function NewAutomationPage({
     return (
       <main className="min-h-screen bg-[#050505] p-10 text-white">
         <div className="mx-auto max-w-3xl">
+
           <h1 className="text-2xl font-bold">
             Authentication Error
           </h1>
@@ -46,6 +62,7 @@ export default async function NewAutomationPage({
           <pre className="mt-5 rounded-xl bg-red-500/10 p-5 text-sm text-red-300">
             {authError.message}
           </pre>
+
         </div>
       </main>
     );
@@ -55,10 +72,17 @@ export default async function NewAutomationPage({
     redirect("/admin/login");
   }
 
-  async function createAutomation(formData: FormData) {
+  /* ==========================================================
+     CREATE AUTOMATION
+  ========================================================== */
+
+  async function createAutomation(
+    formData: FormData
+  ) {
     "use server";
 
-    const supabase = await createClient();
+    const supabase =
+      await createClient();
 
     const {
       data: { user },
@@ -68,93 +92,157 @@ export default async function NewAutomationPage({
       redirect("/admin/login");
     }
 
+    /* ========================================================
+       AUTOMATION NAME
+    ======================================================== */
+
+    const automationName =
+      String(
+        formData.get("name") ?? ""
+      ).trim();
+
+    if (!automationName) {
+      redirect(
+        "/dashboard/automations/new?error=Please+enter+an+automation+name."
+      );
+    }
+
+    if (
+      automationName.length > 100
+    ) {
+      redirect(
+        "/dashboard/automations/new?error=Automation+name+must+be+100+characters+or+less."
+      );
+    }
+
+    /* ========================================================
+       INSTAGRAM POST
+    ======================================================== */
+
+    const instagramPostId =
+      String(
+        formData.get(
+          "instagram_post_id"
+        ) ?? ""
+      ).trim();
+
     /*
-     * IMPORTANT:
+     * instagram_automations.instagram_post_id
+     * stores instagram_posts.id.
      *
-     * instagram_post_id in instagram_automations stores
-     * the Supabase instagram_posts.id UUID.
-     *
-     * instagram_posts.instagram_media_id stores the
-     * actual Instagram media ID.
+     * instagram_posts.instagram_media_id
+     * stores the actual Instagram media ID.
      */
 
-    const instagramPostId = String(
-      formData.get("instagram_post_id") ?? ""
-    ).trim();
+    /* ========================================================
+       TRIGGER
+    ======================================================== */
 
-    const triggerType = String(
-      formData.get("trigger_type") ?? "keywords"
-    ).trim();
+    const triggerType =
+      String(
+        formData.get(
+          "trigger_type"
+        ) ?? "keywords"
+      ).trim();
 
-    const rawKeywords = String(
-      formData.get("trigger_keywords") ?? ""
-    );
+    const rawKeywords =
+      String(
+        formData.get(
+          "trigger_keywords"
+        ) ?? ""
+      );
 
-    const dmMessage = String(
-      formData.get("dm_message") ?? ""
-    ).trim();
+    /* ========================================================
+       DM
+    ======================================================== */
 
-    /*
-     * PUBLIC COMMENT REPLY
-     *
-     * Checkbox explicitly sends:
-     * value="true"
-     */
+    const dmMessage =
+      String(
+        formData.get(
+          "dm_message"
+        ) ?? ""
+      ).trim();
+
+    /* ========================================================
+       PUBLIC COMMENT REPLY
+    ======================================================== */
+
     const rawReplyEnabled =
-      formData.get("reply_enabled");
+      formData.get(
+        "reply_enabled"
+      );
 
     const replyEnabled =
-      rawReplyEnabled === "true";
+      rawReplyEnabled ===
+      "true";
 
-    // Read all rotating public reply messages.
-    const replyTexts = Array.from(
-      new Set(
-        formData
-          .getAll("reply_texts")
-          .map((value) => String(value).trim())
-          .filter(Boolean)
-      )
-    );
+    const replyTexts =
+      Array.from(
+        new Set(
+          formData
+            .getAll(
+              "reply_texts"
+            )
+            .map((value) =>
+              String(
+                value
+              ).trim()
+            )
+            .filter(Boolean)
+        )
+      );
 
-    // Keep the legacy field populated with the first reply.
-    const replyText = replyTexts[0] ?? "";
+    const replyText =
+      replyTexts[0] ?? "";
 
-    console.log(
-      "PUBLIC REPLY FORM DATA:",
-      {
-        replyEnabled,
-        replyTexts,
-        replyText,
-        rawReplyEnabled,
-      }
-    );
+    /* ========================================================
+       DM BUTTON
+    ======================================================== */
 
-    const buttonName = String(
-      formData.get("button_name") ?? ""
-    ).trim();
+    const buttonName =
+      String(
+        formData.get(
+          "button_name"
+        ) ?? ""
+      ).trim();
 
-    const buttonUrl = String(
-      formData.get("button_url") ?? ""
-    ).trim();
+    const buttonUrl =
+      String(
+        formData.get(
+          "button_url"
+        ) ?? ""
+      ).trim();
 
-    console.log("DM BUTTON DATA:", {
-      buttonName,
-      buttonUrl,
-    });
+    /* ========================================================
+       STATUS
+    ======================================================== */
 
     const isActive =
-      formData.get("is_active") === "on";
+      formData.get(
+        "is_active"
+      ) === "on";
 
-    const triggerKeywords = Array.from(
-      new Set(
-        rawKeywords
-          .split(/[\n,]+/)
-          .map((keyword) =>
-            keyword.trim().toLowerCase()
-          )
-          .filter(Boolean)
-      )
-    );
+    /* ========================================================
+       KEYWORDS
+    ======================================================== */
+
+    const triggerKeywords =
+      Array.from(
+        new Set(
+          rawKeywords
+            .split(/[\n,]+/)
+            .map((keyword) =>
+              keyword
+                .trim()
+                .toLowerCase()
+            )
+            .filter(Boolean)
+        )
+      );
+
+    /* ========================================================
+       VALIDATION
+    ======================================================== */
 
     if (!instagramPostId) {
       redirect(
@@ -163,8 +251,10 @@ export default async function NewAutomationPage({
     }
 
     if (
-      triggerType !== "keywords" &&
-      triggerType !== "any_comment"
+      triggerType !==
+        "keywords" &&
+      triggerType !==
+        "any_comment"
     ) {
       redirect(
         "/dashboard/automations/new?error=Invalid+trigger+type."
@@ -172,7 +262,8 @@ export default async function NewAutomationPage({
     }
 
     if (
-      triggerType === "keywords" &&
+      triggerType ===
+        "keywords" &&
       triggerKeywords.length === 0
     ) {
       redirect(
@@ -186,28 +277,48 @@ export default async function NewAutomationPage({
       );
     }
 
-    /*
-     * If public reply is enabled, require reply text.
-     */
-    if (replyEnabled && replyTexts.length === 0) {
+    if (
+      replyEnabled &&
+      replyTexts.length === 0
+    ) {
       redirect(
         "/dashboard/automations/new?error=Please+enter+at+least+one+public+reply+message."
       );
     }
 
+    /* ========================================================
+       GET CONNECTED INSTAGRAM ACCOUNT
+    ======================================================== */
+
     const {
       data: account,
       error: accountError,
     } = await supabase
-      .from("instagram_accounts")
-      .select(
-        "id, instagram_user_id, username, profile_picture_url"
+      .from(
+        "instagram_accounts"
       )
-      .eq("user_id", user.id)
-      .eq("is_connected", true)
-      .order("connected_at", {
-        ascending: false,
-      })
+      .select(
+        `
+        id,
+        instagram_user_id,
+        username,
+        profile_picture_url
+        `
+      )
+      .eq(
+        "user_id",
+        user.id
+      )
+      .eq(
+        "is_connected",
+        true
+      )
+      .order(
+        "connected_at",
+        {
+          ascending: false,
+        }
+      )
       .limit(1)
       .maybeSingle();
 
@@ -225,19 +336,32 @@ export default async function NewAutomationPage({
       );
     }
 
-    /*
-     * instagramPostId is the Supabase post UUID.
-     */
+    /* ========================================================
+       GET SELECTED POST
+    ======================================================== */
+
     const {
       data: post,
       error: postError,
     } = await supabase
-      .from("instagram_posts")
-      .select(
-        "id, instagram_media_id, instagram_account_id"
+      .from(
+        "instagram_posts"
       )
-      .eq("id", instagramPostId)
-      .eq("instagram_account_id", account.id)
+      .select(
+        `
+        id,
+        instagram_media_id,
+        instagram_account_id
+        `
+      )
+      .eq(
+        "id",
+        instagramPostId
+      )
+      .eq(
+        "instagram_account_id",
+        account.id
+      )
       .maybeSingle();
 
     if (postError) {
@@ -254,21 +378,28 @@ export default async function NewAutomationPage({
       );
     }
 
-    /*
-     * Prevent duplicate automation for the same
-     * account + post + trigger configuration.
-     *
-     * IMPORTANT:
-     * instagram_automations.instagram_post_id
-     * stores instagram_posts.id.
-     */
+    /* ========================================================
+       CHECK EXISTING AUTOMATIONS
+    ======================================================== */
+
     const {
       data: existingAutomations,
       error: duplicateError,
     } = await supabase
-      .from("instagram_automations")
+      .from(
+        "instagram_automations"
+      )
       .select(
-        "id, trigger_type, trigger_keywords, trigger_keyword"
+        `
+        id,
+        trigger_type,
+        trigger_keywords,
+        trigger_keyword
+        `
+      )
+      .eq(
+        "user_id",
+        user.id
       )
       .eq(
         "instagram_account_id",
@@ -288,12 +419,18 @@ export default async function NewAutomationPage({
     }
 
     const normalizedExisting =
-      existingAutomations ?? [];
+      existingAutomations ??
+      [];
 
     const newKeywords =
-      triggerKeywords.map((keyword) =>
-        keyword.toLowerCase()
+      triggerKeywords.map(
+        (keyword) =>
+          keyword.toLowerCase()
       );
+
+    /* ========================================================
+       CHECK DUPLICATE TRIGGER
+    ======================================================== */
 
     const duplicate =
       normalizedExisting.some(
@@ -310,9 +447,10 @@ export default async function NewAutomationPage({
           }
 
           /*
-           * Only one any_comment automation
-           * per post.
+           * Only one any-comment
+           * automation per post.
            */
+
           if (
             triggerType ===
             "any_comment"
@@ -339,17 +477,25 @@ export default async function NewAutomationPage({
                 .trim()
                 .toLowerCase()
             )
+            .filter(Boolean)
             .sort();
 
           const b = [
             ...newKeywords,
-          ].sort();
+          ]
+            .filter(Boolean)
+            .sort();
 
           return (
-            a.length === b.length &&
+            a.length ===
+              b.length &&
             a.every(
-              (value, index) =>
-                value === b[index]
+              (
+                value,
+                index
+              ) =>
+                value ===
+                b[index]
             )
           );
         }
@@ -361,101 +507,151 @@ export default async function NewAutomationPage({
       );
     }
 
-    /*
-     * Keep trigger_keyword populated for backward
-     * compatibility with the current webhook.
-     */
+    /* ========================================================
+       LEGACY KEYWORD
+    ======================================================== */
+
     const legacyKeyword =
-      triggerType === "keywords"
-        ? triggerKeywords[0] ?? ""
+      triggerType ===
+      "keywords"
+        ? triggerKeywords[0] ??
+          ""
         : "";
 
-    /*
-     * IMPORTANT:
-     *
-     * Store post.id, NOT post.instagram_media_id.
-     *
-     * post.id:
-     *   Supabase UUID
-     *
-     * post.instagram_media_id:
-     *   Instagram media ID
-     */
+    /* ========================================================
+       CREATE AUTOMATION
+    ======================================================== */
 
     console.log(
       "CREATING INSTAGRAM AUTOMATION:",
       {
-        userId: user.id,
-        accountId: account.id,
-        postId: post.id,
+        name:
+          automationName,
+
+        userId:
+          user.id,
+
+        accountId:
+          account.id,
+
+        postId:
+          post.id,
+
         instagramMediaId:
           post.instagram_media_id,
+
         triggerType,
+
         triggerKeywords,
+
         dmMessage,
+
         replyEnabled,
+
         replyText,
+
         buttonName,
+
         buttonUrl,
+
         isActive,
       }
     );
 
-    const { error: insertError } =
-      await supabase
-        .from("instagram_automations")
-        .insert({
-          user_id: user.id,
+    const {
+      data:
+        createdAutomation,
+      error:
+        insertError,
+    } = await supabase
+      .from(
+        "instagram_automations"
+      )
+      .insert({
+        /* ==================================================
+           NAME
+        ================================================== */
 
-          instagram_account_id:
-            account.id,
+        name:
+          automationName,
 
-          instagram_post_id:
-            post.id,
+        /* ==================================================
+           OWNERSHIP
+        ================================================== */
 
-          trigger_type:
-            triggerType,
+        user_id:
+          user.id,
 
-          trigger_keywords:
-            triggerKeywords,
+        instagram_account_id:
+          account.id,
 
-          trigger_keyword:
-            legacyKeyword,
+        /* ==================================================
+           INSTAGRAM POST
+        ================================================== */
 
-          dm_message:
-            dmMessage,
+        instagram_post_id:
+          post.id,
 
-          /*
-           * PUBLIC COMMENT REPLY
-           */
-          reply_enabled:
-            replyEnabled,
+        /* ==================================================
+           TRIGGER
+        ================================================== */
 
-          reply_text:
-            replyEnabled && replyText
-              ? replyText
-              : null,
+        trigger_type:
+          triggerType,
 
-          reply_texts:
-            replyEnabled && replyTexts.length > 0
-              ? replyTexts
-              : [],
+        trigger_keywords:
+          triggerKeywords,
 
-          /*
-           * DM BUTTON
-           */
-          button_name:
-            buttonName.trim() || null,
+        trigger_keyword:
+          legacyKeyword,
 
-          button_url:
-            buttonUrl.trim() || null,
+        /* ==================================================
+           DM
+        ================================================== */
 
-          /*
-           * AUTOMATION STATUS
-           */
-          is_active:
-            isActive,
-        });
+        dm_message:
+          dmMessage,
+
+        /* ==================================================
+           PUBLIC REPLY
+        ================================================== */
+
+        reply_enabled:
+          replyEnabled,
+
+        reply_text:
+          replyEnabled &&
+          replyText
+            ? replyText
+            : null,
+
+        reply_texts:
+          replyEnabled &&
+          replyTexts.length > 0
+            ? replyTexts
+            : [],
+
+        /* ==================================================
+           BUTTON
+        ================================================== */
+
+        button_name:
+          buttonName ||
+          null,
+
+        button_url:
+          buttonUrl ||
+          null,
+
+        /* ==================================================
+           STATUS
+        ================================================== */
+
+        is_active:
+          isActive,
+      })
+      .select("*")
+      .single();
 
     if (insertError) {
       console.error(
@@ -473,41 +669,86 @@ export default async function NewAutomationPage({
     console.log(
       "INSTAGRAM AUTOMATION CREATED SUCCESSFULLY:",
       {
-        postId: post.id,
+        id:
+          createdAutomation?.id,
+
+        name:
+          automationName,
+
+        postId:
+          post.id,
+
         replyEnabled,
+
         replyTexts,
+
         replyText,
       }
     );
 
-    redirect("/dashboard/automations");
+    /* ========================================================
+       RETURN TO AUTOMATIONS
+    ======================================================== */
+
+    redirect(
+      "/dashboard/automations"
+    );
   }
+
+  /* ==========================================================
+     LOAD CONNECTED ACCOUNT
+  ========================================================== */
 
   const {
     data: account,
     error: accountError,
   } = await supabase
-    .from("instagram_accounts")
-    .select(
-      "id, instagram_user_id, username, profile_picture_url"
+    .from(
+      "instagram_accounts"
     )
-    .eq("user_id", user.id)
-    .eq("is_connected", true)
-    .order("connected_at", {
-      ascending: false,
-    })
+    .select(
+      `
+      id,
+      instagram_user_id,
+      username,
+      profile_picture_url
+      `
+    )
+    .eq(
+      "user_id",
+      user.id
+    )
+    .eq(
+      "is_connected",
+      true
+    )
+    .order(
+      "connected_at",
+      {
+        ascending: false,
+      }
+    )
     .limit(1)
     .maybeSingle();
 
-  let posts: InstagramPost[] = [];
-  let postsError: string | null = null;
+  /* ==========================================================
+     LOAD POSTS
+  ========================================================== */
+
+  let posts:
+    InstagramPost[] = [];
+
+  let postsError:
+    string | null = null;
 
   if (account) {
     const {
       data,
       error,
     } = await supabase
-      .from("instagram_posts")
+      .from(
+        "instagram_posts"
+      )
       .select(
         `
         id,
@@ -523,27 +764,50 @@ export default async function NewAutomationPage({
         "instagram_account_id",
         account.id
       )
-      .order("published_at", {
-        ascending: false,
-      })
+      .order(
+        "published_at",
+        {
+          ascending: false,
+        }
+      )
       .limit(50);
 
     if (error) {
-      postsError = error.message;
+      postsError =
+        error.message;
     } else {
       posts =
-        (data ?? []) as InstagramPost[];
+        (data ??
+          []) as InstagramPost[];
     }
   }
 
-  const pageError = params.error
-    ? decodeURIComponent(params.error)
-    : null;
+  /* ==========================================================
+     PAGE ERROR
+  ========================================================== */
+
+  const pageError =
+    params.error
+      ? decodeURIComponent(
+          params.error
+        )
+      : null;
+
+  /* ==========================================================
+     RENDER
+  ========================================================== */
 
   return (
     <main className="min-h-screen bg-[#050505] text-white">
+
+      {/* ======================================================
+          HEADER
+      ====================================================== */}
+
       <header className="border-b border-white/[0.07]">
+
         <div className="mx-auto max-w-5xl px-6 py-6">
+
           <Link
             href="/dashboard/automations"
             className="text-sm text-gray-500 transition hover:text-white"
@@ -558,14 +822,27 @@ export default async function NewAutomationPage({
           <p className="mt-1 text-sm text-gray-500">
             Create an Instagram comment-to-DM automation.
           </p>
+
         </div>
+
       </header>
 
+      {/* ======================================================
+          CONTENT
+      ====================================================== */}
+
       <div className="mx-auto max-w-3xl px-6 py-10">
+
+        {/* ====================================================
+            ERROR
+        ==================================================== */}
+
         {(pageError ||
           accountError ||
           postsError) && (
+
           <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 p-5">
+
             <h2 className="font-semibold text-red-300">
               Unable to load automation form
             </h2>
@@ -575,11 +852,19 @@ export default async function NewAutomationPage({
                 accountError?.message ||
                 postsError}
             </p>
+
           </div>
+
         )}
 
+        {/* ====================================================
+            NO ACCOUNT
+        ==================================================== */}
+
         {!account ? (
+
           <div className="rounded-3xl border border-yellow-500/20 bg-yellow-500/10 p-8">
+
             <div className="text-4xl">
               🔗
             </div>
@@ -598,12 +883,22 @@ export default async function NewAutomationPage({
             >
               Back to Dashboard
             </Link>
+
           </div>
+
         ) : (
+
           <>
+            {/* ==================================================
+                CONNECTED ACCOUNT
+            ================================================== */}
+
             <div className="mb-6 rounded-2xl border border-green-500/20 bg-green-500/10 p-5">
+
               <div className="flex items-center gap-3">
+
                 {account.profile_picture_url ? (
+
                   <img
                     src={
                       account.profile_picture_url
@@ -611,32 +906,90 @@ export default async function NewAutomationPage({
                     alt=""
                     className="h-10 w-10 rounded-full object-cover"
                   />
+
                 ) : (
+
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/20">
                     ◎
                   </div>
+
                 )}
 
                 <div>
+
                   <p className="text-xs uppercase tracking-wider text-green-300/60">
                     Connected Instagram
                   </p>
 
                   <p className="mt-1 font-semibold text-green-100">
-                    @{account.username ||
+                    @
+                    {account.username ||
                       "Instagram account"}
                   </p>
+
                 </div>
+
               </div>
+
             </div>
 
+            {/* ==================================================
+                FORM
+            ================================================== */}
+
             <form
-              action={createAutomation}
+              action={
+                createAutomation
+              }
               className="rounded-3xl border border-white/[0.07] bg-[#0b0b0b] p-8"
             >
+
+              {/* =================================================
+                  AUTOMATION NAME
+              ================================================= */}
+
               <div>
+
                 <h2 className="text-lg font-semibold">
-                  1. Select Instagram Post
+                  1. Automation Name
+                </h2>
+
+                <p className="mt-2 text-sm text-gray-500">
+                  Give this automation a name so you can easily identify it later from the Scheduler.
+                </p>
+
+                <label
+                  htmlFor="name"
+                  className="mt-5 mb-2 block text-sm font-medium"
+                >
+                  Name
+                </label>
+
+                <input
+                  id="name"
+                  name="name"
+                  required
+                  maxLength={100}
+                  placeholder="Course Launch Comments"
+                  className="w-full rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
+                />
+
+                <p className="mt-2 text-xs text-gray-600">
+                  Example: Course Launch, Webinar Leads, Product Enquiry
+                </p>
+
+              </div>
+
+              <div className="my-8 h-px bg-white/10" />
+
+              {/* =================================================
+                  POST
+              ================================================= */}
+
+              <div>
+
+                <h2 className="text-lg font-semibold">
+                  2. Select Instagram Post
                 </h2>
 
                 <p className="mt-2 text-sm text-gray-500">
@@ -644,7 +997,9 @@ export default async function NewAutomationPage({
                 </p>
 
                 {posts.length === 0 ? (
+
                   <div className="mt-5 rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-5">
+
                     <p className="font-medium text-yellow-200">
                       No Instagram posts found.
                     </p>
@@ -659,9 +1014,13 @@ export default async function NewAutomationPage({
                     >
                       Go to Dashboard
                     </Link>
+
                   </div>
+
                 ) : (
+
                   <div className="mt-5">
+
                     <label
                       htmlFor="instagram_post_id"
                       className="mb-2 block text-sm font-medium"
@@ -672,15 +1031,23 @@ export default async function NewAutomationPage({
                     <PostSelector
                       posts={posts}
                     />
+
                   </div>
+
                 )}
+
               </div>
 
               <div className="my-8 h-px bg-white/10" />
 
+              {/* =================================================
+                  TRIGGER
+              ================================================= */}
+
               <div>
+
                 <h2 className="text-lg font-semibold">
-                  2. Trigger
+                  3. Trigger
                 </h2>
 
                 <p className="mt-2 text-sm text-gray-500">
@@ -688,7 +1055,9 @@ export default async function NewAutomationPage({
                 </p>
 
                 <div className="mt-5 space-y-3">
+
                   <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 transition hover:bg-white/[0.04]">
+
                     <input
                       type="radio"
                       name="trigger_type"
@@ -698,6 +1067,7 @@ export default async function NewAutomationPage({
                     />
 
                     <div>
+
                       <p className="font-medium">
                         Specific keywords
                       </p>
@@ -705,10 +1075,13 @@ export default async function NewAutomationPage({
                       <p className="mt-1 text-xs text-gray-500">
                         Send the DM when a comment contains any of your keywords.
                       </p>
+
                     </div>
+
                   </label>
 
                   <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 transition hover:bg-white/[0.04]">
+
                     <input
                       type="radio"
                       name="trigger_type"
@@ -717,6 +1090,7 @@ export default async function NewAutomationPage({
                     />
 
                     <div>
+
                       <p className="font-medium">
                         Any comment
                       </p>
@@ -724,8 +1098,11 @@ export default async function NewAutomationPage({
                       <p className="mt-1 text-xs text-gray-500">
                         Send the DM for every comment on this post.
                       </p>
+
                     </div>
+
                   </label>
+
                 </div>
 
                 <label
@@ -740,22 +1117,26 @@ export default async function NewAutomationPage({
                   name="trigger_keywords"
                   rows={4}
                   maxLength={1000}
-                  placeholder={
-                    "link, price, details"
-                  }
+                  placeholder="link, price, details"
                   className="w-full resize-y rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm leading-6 outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
                 />
 
                 <p className="mt-2 text-xs text-gray-600">
                   Separate keywords with commas or put each keyword on a new line.
                 </p>
+
               </div>
 
               <div className="my-8 h-px bg-white/10" />
 
+              {/* =================================================
+                  DM
+              ================================================= */}
+
               <div>
+
                 <h2 className="text-lg font-semibold">
-                  3. DM Message
+                  4. DM Message
                 </h2>
 
                 <p className="mt-2 text-sm text-gray-500">
@@ -784,9 +1165,16 @@ https://example.com`}
                   className="w-full resize-y rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm leading-6 outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
                 />
 
+                {/* =================================================
+                    PUBLIC REPLY
+                ================================================= */}
+
                 <div className="mt-6 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
+
                   <label className="flex items-center justify-between">
+
                     <div>
+
                       <p className="font-medium">
                         Reply to Comment
                       </p>
@@ -794,6 +1182,7 @@ https://example.com`}
                       <p className="mt-1 text-xs text-gray-500">
                         Public reply on Instagram comment
                       </p>
+
                     </div>
 
                     <input
@@ -802,13 +1191,21 @@ https://example.com`}
                       value="true"
                       className="h-5 w-5 accent-[#ff1744]"
                     />
+
                   </label>
 
                   <ReplyFieldsEditor />
+
                 </div>
 
+                {/* =================================================
+                    BUTTON
+                ================================================= */}
+
                 <div className="mt-6 space-y-4">
+
                   <div>
+
                     <label
                       htmlFor="button_name"
                       className="mb-2 block text-sm font-medium"
@@ -822,9 +1219,11 @@ https://example.com`}
                       placeholder="Get Course"
                       className="w-full rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
                     />
+
                   </div>
 
                   <div>
+
                     <label
                       htmlFor="button_url"
                       className="mb-2 block text-sm font-medium"
@@ -839,19 +1238,29 @@ https://example.com`}
                       placeholder="https://example.com"
                       className="w-full rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
                     />
+
                   </div>
+
                 </div>
+
               </div>
 
               <div className="my-8 h-px bg-white/10" />
 
+              {/* =================================================
+                  STATUS
+              ================================================= */}
+
               <div>
+
                 <h2 className="text-lg font-semibold">
-                  4. Status
+                  5. Status
                 </h2>
 
                 <label className="mt-5 flex cursor-pointer items-center justify-between rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
+
                   <div>
+
                     <p className="text-sm font-medium">
                       Activate automation
                     </p>
@@ -859,6 +1268,7 @@ https://example.com`}
                     <p className="mt-1 text-xs text-gray-600">
                       Start processing matching comments immediately.
                     </p>
+
                   </div>
 
                   <input
@@ -867,10 +1277,17 @@ https://example.com`}
                     defaultChecked
                     className="h-5 w-5 accent-[#ff1744]"
                   />
+
                 </label>
+
               </div>
 
+              {/* =================================================
+                  BUTTONS
+              ================================================= */}
+
               <div className="mt-10 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+
                 <Link
                   href="/dashboard/automations"
                   className="inline-flex items-center justify-center rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-6 py-3 text-sm font-medium text-white/60 hover:bg-white/[0.08] hover:text-white"
@@ -880,15 +1297,20 @@ https://example.com`}
 
                 <button
                   type="submit"
-                  disabled={posts.length === 0}
+                  disabled={
+                    posts.length === 0
+                  }
                   className="rounded-xl bg-[#ff1744] px-6 py-3 text-sm font-semibold hover:bg-[#e9143d] disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Create Automation
                 </button>
+
               </div>
+
             </form>
           </>
         )}
+
       </div>
     </main>
   );
