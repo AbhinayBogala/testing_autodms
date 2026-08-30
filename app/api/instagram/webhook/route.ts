@@ -1231,7 +1231,7 @@ async function processComment(
           .from("instagram_automation_link_clicks")
           .insert({
             automation_id: selectedAutomation.id,
-            recipient_instagram_id: webhookInstagramUserId,
+            recipient_instagram_id: String(commenterId).trim(),
             target_url: targetUrl,
             token,
           })
@@ -1308,7 +1308,7 @@ async function processComment(
           .insert({
             automation_id: selectedAutomation.id,
             link_click_id: linkClickId,
-            recipient_instagram_id: webhookInstagramUserId,
+            recipient_instagram_id: String(commenterId).trim(),
             followup_message: selectedAutomation.followup_message.trim(),
             due_at: new Date(Date.now() + delayMinutes * 60 * 1000).toISOString(),
           });
