@@ -1735,7 +1735,7 @@ async function processMessage(
         .from("instagram_accounts")
         .select("id")
         .eq(
-          "instagram_user_id",
+          "webhook_instagram_user_id",
           webhookInstagramUserId
         )
         .maybeSingle();
