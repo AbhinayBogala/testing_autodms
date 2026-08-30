@@ -949,17 +949,13 @@ function ScheduleComposer({
     null,
   );
   const [automationError, setAutomationError] = useState("");
-  const [timezone, setTimezone] = useState("UTC");
+  // All scheduled times are entered and stored as India Standard Time (IST).
+  const timezone = "Asia/Kolkata";
 
   const [automationForm, setAutomationForm] = useState<AutomationForm>(
     EMPTY_AUTOMATION_FORM,
   );
 
-  useEffect(() => {
-    setTimezone(
-      Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-    );
-  }, []);
 
   const availableAutomations = useMemo(
     () =>
@@ -2512,27 +2508,50 @@ function createLocalDateTime(
     !month ||
     !day ||
     Number.isNaN(hours) ||
-    Number.isNaN(minutes)
+    Number.isNaN(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
   ) {
     return null;
   }
 
+  // Interpret the selected date/time explicitly as IST (UTC+05:30),
+  // regardless of the timezone configured on the user's computer.
   const date = new Date(
-    year,
-    month - 1,
-    day,
-    hours,
-    minutes,
-    0,
-    0,
+    `${dateString}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00+05:30`,
   );
 
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  // Validate the resulting instant in the scheduler timezone.
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+
+  const actualHour = values.hour === "24" ? "00" : values.hour;
+
   if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day ||
-    date.getHours() !== hours ||
-    date.getMinutes() !== minutes
+    values.year !== String(year) ||
+    values.month !== String(month).padStart(2, "0") ||
+    values.day !== String(day).padStart(2, "0") ||
+    actualHour !== String(hours).padStart(2, "0") ||
+    values.minute !== String(minutes).padStart(2, "0")
   ) {
     return null;
   }
