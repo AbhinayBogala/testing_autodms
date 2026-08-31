@@ -53,6 +53,12 @@ type Automation = {
 
   reply_text?: string | null;
 
+  followup_enabled?: boolean | null;
+
+  followup_delay_minutes?: number | null;
+
+  followup_message?: string | null;
+
   post?: {
     id?: string;
     caption: string | null;
@@ -194,6 +200,36 @@ function getAutomationName(
    TRIGGER LABEL
 ============================================================ */
 
+function getFollowupDelayLabel(
+  minutes?: number | null
+) {
+  const value = Number(minutes ?? 360);
+
+  if (value === 60) return "1 hour";
+  if (value === 180) return "3 hours";
+  if (value === 360) return "6 hours";
+  if (value === 720) return "12 hours";
+  if (value === 1380) return "23 hours";
+
+  if (value < 60) {
+    return `${value} min`;
+  }
+
+  if (value % 60 === 0) {
+    const hours = value / 60;
+    return `${hours} hour${hours === 1 ? "" : "s"}`;
+  }
+
+  const hours = Math.floor(value / 60);
+  const mins = value % 60;
+
+  return `${hours}h ${mins}m`;
+}
+
+/* ============================================================
+   TRIGGER LABEL
+============================================================ */
+
 function getTriggerLabel(
   automation: Automation
 ) {
@@ -285,7 +321,10 @@ export default async function AutomationsPage() {
           button_name,
           button_url,
           reply_enabled,
-          reply_text
+          reply_text,
+          followup_enabled,
+          followup_delay_minutes,
+          followup_message
         `
       )
       .eq(
@@ -971,25 +1010,57 @@ export default async function AutomationsPage() {
 
                             )}
 
-                          {/* BUTTON */}
+                          {/* BUTTON + FOLLOW-UP */}
 
-                          {automation.button_name &&
-                            automation.button_url && (
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
 
-                              <div className="mt-3 inline-flex items-center gap-2 rounded-lg border border-[#ff1744]/10 bg-[#ff1744]/[0.04] px-3 py-1.5 text-[10px] font-medium text-[#ff6b86]">
+                            {automation.button_name &&
+                              automation.button_url && (
+
+                                <div className="inline-flex items-center gap-2 rounded-lg border border-[#ff1744]/10 bg-[#ff1744]/[0.04] px-3 py-1.5 text-[10px] font-medium text-[#ff6b86]">
+
+                                  <span>
+                                    ↗
+                                  </span>
+
+                                  Button:{" "}
+                                  {
+                                    automation.button_name
+                                  }
+
+                                </div>
+
+                              )}
+
+                            {automation.followup_enabled && (
+
+                              <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/10 bg-emerald-500/[0.04] px-3 py-1.5 text-[10px] font-medium text-emerald-400">
 
                                 <span>
-                                  ↗
+                                  ↻
                                 </span>
 
-                                Button:{" "}
-                                {
-                                  automation.button_name
-                                }
+                                <span>
+                                  Follow up: ON
+                                </span>
+
+                                <span className="text-emerald-400/50">
+                                  •
+                                </span>
+
+                                <span className="text-emerald-300/80">
+                                  {
+                                    getFollowupDelayLabel(
+                                      automation.followup_delay_minutes
+                                    )
+                                  }
+                                </span>
 
                               </div>
 
                             )}
+
+                          </div>
 
                         </div>
 
