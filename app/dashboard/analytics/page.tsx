@@ -6,10 +6,25 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+type SearchParams = {
+  automation_id?: string | string[];
+};
+
+type AnalyticsPageProps = {
+  searchParams?: Promise<SearchParams>;
+};
+
+type Account = {
+  id: string;
+  username: string | null;
+  instagram_user_id: string | null;
+  is_connected: boolean | null;
+};
+
 type Automation = {
   id: string;
   instagram_post_id: string | null;
-  trigger_type: string;
+  trigger_type: string | null;
   trigger_keyword: string | null;
   trigger_keywords: string[] | null;
   dm_message: string | null;
@@ -21,6 +36,7 @@ type Automation = {
   reply_enabled: boolean | null;
   reply_text: string | null;
   followup_enabled: boolean | null;
+  followup_delay_minutes: number | null;
 };
 
 type InstagramPost = {
@@ -29,13 +45,14 @@ type InstagramPost = {
   caption: string | null;
   media_type: string | null;
   media_url: string | null;
+  comments_count: number | null;
+  likes_count: number | null;
 };
 
 type CommentRow = {
   id: string;
   automation_id: string | null;
   instagram_post_id: string | null;
-  commenter_instagram_id: string | null;
   dm_sent: boolean | null;
   public_reply_sent: boolean | null;
   created_at: string;
@@ -44,7 +61,6 @@ type CommentRow = {
 type LinkClickRow = {
   id: string;
   automation_id: string | null;
-  recipient_instagram_id: string;
   clicked_at: string | null;
   created_at: string;
 };
@@ -53,46 +69,14 @@ type FollowupRow = {
   id: string;
   automation_id: string | null;
   link_click_id: string | null;
-  recipient_instagram_id: string;
   due_at: string;
   sent_at: string | null;
   failed_at: string | null;
-  last_error: string | null;
   processing_at: string | null;
-  attempts: number | null;
-  created_at: string;
 };
 
 function emptyUuid() {
   return "00000000-0000-0000-0000-000000000000";
-}
-
-function isSkippedFollowup(
-  followup: FollowupRow,
-  clickMap: Map<string, LinkClickRow>,
-) {
-  /*
-   * Your current cron marks a follow-up as processed by setting
-   * sent_at even when it skips the DM because the link was clicked.
-   *
-   * Therefore:
-   * clicked_at <= due_at
-   * means the follow-up was skipped.
-   */
-  if (!followup.sent_at || !followup.link_click_id) {
-    return false;
-  }
-
-  const click = clickMap.get(followup.link_click_id);
-
-  if (!click?.clicked_at) {
-    return false;
-  }
-
-  return (
-    new Date(click.clicked_at).getTime() <=
-    new Date(followup.due_at).getTime()
-  );
 }
 
 function formatDate(value: string | null) {
@@ -109,14 +93,101 @@ function formatDate(value: string | null) {
 }
 
 function getTriggerLabel(automation: Automation) {
-  if (automation.trigger_type === "keyword") {
-    return "Keyword → DM";
+  if (
+    automation.trigger_type === "keyword" ||
+    automation.trigger_type === "keywords"
+  ) {
+    return "Specific keywords";
   }
 
-  return "Any Comment → DM";
+  return "Any comment";
 }
 
-export default async function AnalyticsPage() {
+function getFollowupDelayLabel(minutes: number | null) {
+  const value = Number(minutes ?? 360);
+
+  if (value === 60) return "1 hour";
+  if (value === 180) return "3 hours";
+  if (value === 360) return "6 hours";
+  if (value === 720) return "12 hours";
+  if (value === 1380) return "23 hours";
+
+  if (value % 60 === 0) {
+    const hours = value / 60;
+    return `${hours} hour${hours === 1 ? "" : "s"}`;
+  }
+
+  return `${value} minutes`;
+}
+
+function wasSkipped(
+  followup: FollowupRow,
+  clickMap: Map<string, LinkClickRow>,
+) {
+  if (!followup.sent_at || !followup.link_click_id) {
+    return false;
+  }
+
+  const click = clickMap.get(followup.link_click_id);
+
+  if (!click?.clicked_at) {
+    return false;
+  }
+
+  return (
+    new Date(click.clicked_at).getTime() <=
+    new Date(followup.due_at).getTime()
+  );
+}
+
+function Metric({
+  label,
+  value,
+  suffix = "",
+  valueLabel,
+}: {
+  label: string;
+  value: number;
+  suffix?: string;
+  valueLabel?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/[0.07] bg-[#0b0b0b] p-5">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-600">
+        {label}
+      </p>
+
+      <p className="mt-4 text-3xl font-bold tracking-[-0.04em]">
+        {valueLabel ??
+          `${value.toLocaleString("en-IN")}${suffix}`}
+      </p>
+    </div>
+  );
+}
+
+function SmallMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3">
+      <p className="text-[10px] uppercase tracking-wider text-gray-600">
+        {label}
+      </p>
+
+      <p className="mt-1 text-lg font-semibold text-gray-300">
+        {value.toLocaleString("en-IN")}
+      </p>
+    </div>
+  );
+}
+
+export default async function AnalyticsPage({
+  searchParams,
+}: AnalyticsPageProps) {
   const supabase = await createClient();
 
   const {
@@ -127,31 +198,38 @@ export default async function AnalyticsPage() {
     redirect("/login");
   }
 
-  const userId = user.id;
+  const params = searchParams
+    ? await searchParams
+    : {};
+
+  const rawAutomationId =
+    params.automation_id;
+
+  const automationId = Array.isArray(
+    rawAutomationId,
+  )
+    ? rawAutomationId[0]
+    : rawAutomationId;
+
   const admin = createAdminClient();
 
   /*
    * ============================================================
    * CONNECTED INSTAGRAM ACCOUNT
    * ============================================================
-   *
-   * Do NOT match the webhook Instagram ID here.
-   *
-   * OAuth instagram_user_id and webhook_instagram_user_id can be
-   * different. The account is owned by the authenticated user.
    */
-  const { data: account, error: accountError } = await admin
+
+  const { data: accountData } = await admin
     .from("instagram_accounts")
     .select(
       `
       id,
       username,
       instagram_user_id,
-      webhook_instagram_user_id,
       is_connected
       `,
     )
-    .eq("user_id", userId)
+    .eq("user_id", user.id)
     .eq("is_connected", true)
     .order("connected_at", {
       ascending: false,
@@ -160,23 +238,41 @@ export default async function AnalyticsPage() {
     .limit(1)
     .maybeSingle();
 
-  if (accountError) {
-    console.error("ANALYTICS ACCOUNT ERROR:", accountError);
+  const account =
+    accountData as Account | null;
+
+  if (!account) {
+    return (
+      <main className="min-h-screen bg-[#050505] px-4 py-10 text-white sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="rounded-[22px] border border-white/[0.07] bg-[#0b0b0b] p-8 text-center">
+            <div className="text-4xl">📊</div>
+
+            <h1 className="mt-4 text-2xl font-semibold">
+              Instagram not connected
+            </h1>
+
+            <p className="mt-2 text-sm text-gray-500">
+              Connect Instagram to view analytics.
+            </p>
+          </div>
+        </div>
+      </main>
+    );
   }
 
-  let automations: Automation[] = [];
-  let posts: InstagramPost[] = [];
-  let comments: CommentRow[] = [];
-  let linkClicks: LinkClickRow[] = [];
-  let followups: FollowupRow[] = [];
+  /*
+   * ============================================================
+   * ACCOUNT-WIDE DATA
+   *
+   * These queries are used when the user opens:
+   *
+   * /dashboard/analytics
+   * ============================================================
+   */
 
-  if (account) {
-    /*
-     * ==========================================================
-     * AUTOMATIONS
-     * ==========================================================
-     */
-    const { data: automationData, error: automationError } = await admin
+  const { data: automationData } =
+    await admin
       .from("instagram_automations")
       .select(
         `
@@ -193,38 +289,37 @@ export default async function AnalyticsPage() {
         button_url,
         reply_enabled,
         reply_text,
-        followup_enabled
+        followup_enabled,
+        followup_delay_minutes
         `,
       )
-      .eq("user_id", userId)
+      .eq("user_id", user.id)
       .eq("instagram_account_id", account.id)
-      .order("updated_at", { ascending: false });
+      .order("updated_at", {
+        ascending: false,
+      });
 
-    if (automationError) {
-      console.error("ANALYTICS AUTOMATIONS ERROR:", automationError);
-    }
+  const allAutomations =
+    (automationData ?? []) as Automation[];
 
-    automations = (automationData ?? []) as Automation[];
+  const allAutomationIds =
+    allAutomations.map(
+      (automation) => automation.id,
+    );
 
-    const automationIds = automations.map((automation) => automation.id);
+  const safeAutomationIds =
+    allAutomationIds.length > 0
+      ? allAutomationIds
+      : [emptyUuid()];
 
-    /*
-     * ==========================================================
-     * COMMENTS
-     * ==========================================================
-     *
-     * Only comments that belong to this user's automations are
-     * counted. This is "Comments Processed", not total Instagram
-     * comments on every post.
-     */
-    const { data: commentData, error: commentError } = await admin
+  const { data: allCommentsData } =
+    await admin
       .from("instagram_comments")
       .select(
         `
         id,
         automation_id,
         instagram_post_id,
-        commenter_instagram_id,
         dm_sent,
         public_reply_sent,
         created_at
@@ -232,101 +327,168 @@ export default async function AnalyticsPage() {
       )
       .in(
         "automation_id",
-        automationIds.length ? automationIds : [emptyUuid()],
+        safeAutomationIds,
+      );
+
+  const allComments =
+    (allCommentsData ?? []) as CommentRow[];
+
+  const { data: allClicksData } =
+    await admin
+      .from(
+        "instagram_automation_link_clicks",
       )
-      .order("created_at", { ascending: false });
-
-    if (commentError) {
-      console.error("ANALYTICS COMMENTS ERROR:", commentError);
-    }
-
-    comments = (commentData ?? []) as CommentRow[];
-
-    /*
-     * ==========================================================
-     * TRACKED LINKS / CLICKS
-     * ==========================================================
-     */
-    const { data: clickData, error: clickError } = await admin
-      .from("instagram_automation_link_clicks")
       .select(
         `
         id,
         automation_id,
-        recipient_instagram_id,
         clicked_at,
         created_at
         `,
       )
       .in(
         "automation_id",
-        automationIds.length ? automationIds : [emptyUuid()],
+        safeAutomationIds,
+      );
+
+  const allClicks =
+    (allClicksData ?? []) as LinkClickRow[];
+
+  const { data: allFollowupsData } =
+    await admin
+      .from(
+        "instagram_automation_followups",
       )
-      .order("created_at", { ascending: false });
-
-    if (clickError) {
-      console.error("ANALYTICS LINK CLICKS ERROR:", clickError);
-    }
-
-    linkClicks = (clickData ?? []) as LinkClickRow[];
-
-    /*
-     * ==========================================================
-     * FOLLOW-UPS
-     * ==========================================================
-     */
-    const { data: followupData, error: followupError } = await admin
-      .from("instagram_automation_followups")
       .select(
         `
         id,
         automation_id,
         link_click_id,
-        recipient_instagram_id,
         due_at,
         sent_at,
         failed_at,
-        last_error,
-        processing_at,
-        attempts,
-        created_at
+        processing_at
         `,
       )
       .in(
         "automation_id",
-        automationIds.length ? automationIds : [emptyUuid()],
-      )
-      .order("created_at", { ascending: false });
+        safeAutomationIds,
+      );
 
-    if (followupError) {
-      console.error("ANALYTICS FOLLOWUPS ERROR:", followupError);
-    }
+  const allFollowups =
+    (allFollowupsData ?? []) as FollowupRow[];
 
-    followups = (followupData ?? []) as FollowupRow[];
+  /*
+   * ============================================================
+   * ACCOUNT METRICS
+   * ============================================================
+   */
 
-    /*
-     * ==========================================================
-     * POSTS
-     * ==========================================================
-     *
-     * IMPORTANT FIX:
-     * instagram_automations.instagram_post_id is the POST ROW ID,
-     * not instagram_posts.instagram_media_id.
-     *
-     * The old Analytics page searched instagram_media_id using
-     * the UUID stored in instagram_post_id, which is why post
-     * information was showing as "Instagram post" / zero data.
-     */
-    const postIds = [
-      ...new Set(
-        automations
-          .map((automation) => automation.instagram_post_id)
-          .filter((value): value is string => Boolean(value)),
+  const totalAutomations =
+    allAutomations.length;
+
+  const activeAutomations =
+    allAutomations.filter(
+      (automation) =>
+        automation.is_active,
+    ).length;
+
+  const totalComments =
+    allComments.length;
+
+  const totalDms =
+    allComments.filter(
+      (comment) => comment.dm_sent,
+    ).length;
+
+  const totalPublicReplies =
+    allComments.filter(
+      (comment) =>
+        comment.public_reply_sent,
+    ).length;
+
+  const totalTrackedLinks =
+    allClicks.length;
+
+  const totalLinkClicks =
+    allClicks.filter(
+      (click) => Boolean(click.clicked_at),
+    ).length;
+
+  const accountClickRate =
+    totalTrackedLinks > 0
+      ? (
+          (totalLinkClicks /
+            totalTrackedLinks) *
+          100
+        )
+      : 0;
+
+  const allClickMap = new Map(
+    allClicks.map((click) => [
+      click.id,
+      click,
+    ]),
+  );
+
+  const totalFollowupsSkipped =
+    allFollowups.filter((followup) =>
+      wasSkipped(
+        followup,
+        allClickMap,
       ),
-    ];
+    ).length;
 
-    if (postIds.length) {
-      const { data: postData, error: postError } = await admin
+  const totalFollowupsFailed =
+    allFollowups.filter(
+      (followup) =>
+        Boolean(followup.failed_at),
+    ).length;
+
+  const totalFollowupsSent =
+    allFollowups.filter((followup) => {
+      if (
+        !followup.sent_at ||
+        followup.failed_at
+      ) {
+        return false;
+      }
+
+      return !wasSkipped(
+        followup,
+        allClickMap,
+      );
+    }).length;
+
+  const totalPendingFollowups =
+    allFollowups.filter(
+      (followup) =>
+        !followup.sent_at &&
+        !followup.failed_at,
+    ).length;
+
+  /*
+   * ============================================================
+   * ACCOUNT POST DATA
+   * ============================================================
+   */
+
+  const allPostIds = [
+    ...new Set(
+      allAutomations
+        .map(
+          (automation) =>
+            automation.instagram_post_id,
+        )
+        .filter(Boolean),
+    ),
+  ];
+
+  let allPosts: InstagramPost[] = [];
+
+  if (allPostIds.length > 0) {
+    const { data: postData } =
+      await admin
         .from("instagram_posts")
         .select(
           `
@@ -334,666 +496,857 @@ export default async function AnalyticsPage() {
           instagram_media_id,
           caption,
           media_type,
-          media_url
+          media_url,
+          comments_count,
+          likes_count
           `,
         )
-        .eq("instagram_account_id", account.id)
-        .in("id", postIds);
+        .eq(
+          "instagram_account_id",
+          account.id,
+        )
+        .in("id", allPostIds);
 
-      if (postError) {
-        console.error("ANALYTICS POSTS ERROR:", postError);
-      }
-
-      posts = (postData ?? []) as InstagramPost[];
-    }
-  }
-
-  /*
-   * ============================================================
-   * GLOBAL METRICS
-   * ============================================================
-   */
-
-  const totalAutomations = automations.length;
-
-  const activeAutomations = automations.filter(
-    (automation) => automation.is_active,
-  ).length;
-
-  const inactiveAutomations =
-    totalAutomations - activeAutomations;
-
-  const commentsProcessed = comments.length;
-
-  const initialDmsSent = comments.filter(
-    (comment) => comment.dm_sent === true,
-  ).length;
-
-  const publicRepliesSent = comments.filter(
-    (comment) => comment.public_reply_sent === true,
-  ).length;
-
-  const trackedLinks = linkClicks.length;
-
-  const linkClicksTotal = linkClicks.filter(
-    (click) => Boolean(click.clicked_at),
-  ).length;
-
-  const clickRate =
-    trackedLinks > 0
-      ? (linkClicksTotal / trackedLinks) * 100
-      : 0;
-
-  const clickMap = new Map(
-    linkClicks.map((click) => [click.id, click]),
-  );
-
-  const skippedFollowups = followups.filter(
-    (followup) => isSkippedFollowup(followup, clickMap),
-  ).length;
-
-  const failedFollowups = followups.filter(
-    (followup) => Boolean(followup.failed_at),
-  ).length;
-
-  const sentFollowups = followups.filter((followup) => {
-    if (!followup.sent_at || followup.failed_at) {
-      return false;
-    }
-
-    return !isSkippedFollowup(followup, clickMap);
-  }).length;
-
-  /*
-   * Pending means the follow-up has not been processed yet.
-   *
-   * We intentionally do NOT require due_at > now. If a cron run
-   * is delayed and a due follow-up is still unprocessed, it should
-   * still appear as pending rather than disappear from analytics.
-   */
-  const pendingFollowups = followups.filter(
-    (followup) =>
-      !followup.sent_at && !followup.failed_at,
-  ).length;
-
-  /*
-   * ============================================================
-   * PER-AUTOMATION METRICS
-   * ============================================================
-   */
-
-  const commentsByAutomation = new Map<string, number>();
-  const dmsByAutomation = new Map<string, number>();
-  const publicRepliesByAutomation = new Map<string, number>();
-  const trackedLinksByAutomation = new Map<string, number>();
-  const clicksByAutomation = new Map<string, number>();
-  const followupsSentByAutomation = new Map<string, number>();
-  const followupsSkippedByAutomation = new Map<string, number>();
-  const followupsFailedByAutomation = new Map<string, number>();
-  const pendingFollowupsByAutomation = new Map<string, number>();
-
-  for (const comment of comments) {
-    if (!comment.automation_id) continue;
-
-    commentsByAutomation.set(
-      comment.automation_id,
-      (commentsByAutomation.get(comment.automation_id) ?? 0) + 1,
-    );
-
-    if (comment.dm_sent) {
-      dmsByAutomation.set(
-        comment.automation_id,
-        (dmsByAutomation.get(comment.automation_id) ?? 0) + 1,
-      );
-    }
-
-    if (comment.public_reply_sent) {
-      publicRepliesByAutomation.set(
-        comment.automation_id,
-        (publicRepliesByAutomation.get(comment.automation_id) ?? 0) + 1,
-      );
-    }
-  }
-
-  for (const click of linkClicks) {
-    if (!click.automation_id) continue;
-
-    trackedLinksByAutomation.set(
-      click.automation_id,
-      (trackedLinksByAutomation.get(click.automation_id) ?? 0) + 1,
-    );
-
-    if (click.clicked_at) {
-      clicksByAutomation.set(
-        click.automation_id,
-        (clicksByAutomation.get(click.automation_id) ?? 0) + 1,
-      );
-    }
-  }
-
-  for (const followup of followups) {
-    if (!followup.automation_id) continue;
-
-    if (!followup.sent_at && !followup.failed_at) {
-      pendingFollowupsByAutomation.set(
-        followup.automation_id,
-        (pendingFollowupsByAutomation.get(followup.automation_id) ?? 0) + 1,
-      );
-    }
-
-    if (followup.failed_at) {
-      followupsFailedByAutomation.set(
-        followup.automation_id,
-        (followupsFailedByAutomation.get(followup.automation_id) ?? 0) + 1,
-      );
-      continue;
-    }
-
-    if (!followup.sent_at) {
-      continue;
-    }
-
-    if (isSkippedFollowup(followup, clickMap)) {
-      followupsSkippedByAutomation.set(
-        followup.automation_id,
-        (followupsSkippedByAutomation.get(followup.automation_id) ?? 0) + 1,
-      );
-    } else {
-      followupsSentByAutomation.set(
-        followup.automation_id,
-        (followupsSentByAutomation.get(followup.automation_id) ?? 0) + 1,
-      );
-    }
+    allPosts =
+      (postData ?? []) as InstagramPost[];
   }
 
   const postMap = new Map(
-    posts.map((post) => [post.id, post]),
+    allPosts.map((post) => [
+      post.id,
+      post,
+    ]),
   );
 
-  return (
-    <div className="px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
-      <div>
-        <p className="text-sm text-gray-500">Performance</p>
+  /*
+   * ============================================================
+   * ACCOUNT VIEW
+   * ============================================================
+   */
 
-        <h1 className="mt-1 text-3xl font-bold">
-          Analytics
-        </h1>
+  if (!automationId) {
+    return (
+      <main className="min-h-screen bg-[#050505] text-white">
+        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
 
-        <p className="mt-2 text-gray-400">
-          Real performance data from your Instagram automations.
-        </p>
-      </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-600">
+              DevilX / Analytics
+            </p>
 
-      {!account ? (
-        <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center">
-          <div className="text-4xl">📊</div>
+            <h1 className="mt-2 text-3xl font-bold tracking-[-0.04em]">
+              Account Analytics
+            </h1>
 
-          <h2 className="mt-4 text-xl font-semibold">
-            Connect Instagram
-          </h2>
-
-          <p className="mt-2 text-gray-500">
-            Connect an Instagram account to view automation analytics.
-          </p>
-        </div>
-      ) : (
-        <>
-          {/* CONNECTED ACCOUNT */}
-
-          <div className="mt-8 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm text-gray-500">
-                Connected Instagram Account
-              </p>
-
-              <p className="mt-1 text-lg font-semibold">
-                @{account.username || "Instagram"}
-              </p>
-
-              <p className="mt-1 text-xs text-gray-600">
-                Automation analytics for this connected account
-              </p>
-            </div>
-
-            <div className="w-fit rounded-full bg-green-500/10 px-4 py-2 text-sm text-green-400">
-              ● Connected
-            </div>
-          </div>
-
-          {/* ==================================================
-              PRIMARY METRICS
-              ================================================== */}
-
-          <div className="mt-8">
-            <h2 className="text-lg font-semibold">
-              Automation Overview
-            </h2>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Actual activity recorded by DevilX.
+            <p className="mt-2 text-sm text-gray-500">
+              Complete analytics across your Instagram automations.
             </p>
           </div>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {/* ACCOUNT */}
+
+          <section className="mt-7 rounded-[22px] border border-white/[0.07] bg-[#0b0b0b] p-5 sm:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-600">
+                  Instagram Account
+                </p>
+
+                <p className="mt-2 text-lg font-semibold">
+                  @{account.username || "Instagram"}
+                </p>
+
+                <p className="mt-1 text-xs text-gray-600">
+                  All account automation analytics
+                </p>
+              </div>
+
+              <span className="w-fit rounded-full border border-emerald-500/10 bg-emerald-500/[0.06] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
+                ● Connected
+              </span>
+
+            </div>
+          </section>
+
+          {/* MAIN TOTALS */}
+
+          <section className="mt-7">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold">
+                Account Overview
+              </h2>
+
+              <p className="mt-1 text-xs text-gray-600">
+                Totals across all your automation activity.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
+              <Metric
+                label="Total Automations"
+                value={totalAutomations}
+              />
+
+              <Metric
+                label="Active Automations"
+                value={activeAutomations}
+              />
+
+              <Metric
+                label="Comments"
+                value={totalComments}
+              />
+
+              <Metric
+                label="Initial DMs"
+                value={totalDms}
+              />
+
+            </div>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
+              <Metric
+                label="Public Replies"
+                value={totalPublicReplies}
+              />
+
+              <Metric
+                label="Tracked Links"
+                value={totalTrackedLinks}
+              />
+
+              <Metric
+                label="Link Clicks"
+                value={totalLinkClicks}
+              />
+
+              <Metric
+                label="Click Rate"
+                value={Number(
+                  accountClickRate.toFixed(1),
+                )}
+                suffix="%"
+              />
+
+            </div>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
+              <Metric
+                label="Follow-ups Sent"
+                value={totalFollowupsSent}
+              />
+
+              <Metric
+                label="Follow-ups Skipped"
+                value={totalFollowupsSkipped}
+              />
+
+              <Metric
+                label="Follow-ups Failed"
+                value={totalFollowupsFailed}
+              />
+
+              <Metric
+                label="Pending Follow-ups"
+                value={totalPendingFollowups}
+              />
+
+            </div>
+          </section>
+
+          {/* POSTS */}
+
+          <section className="mt-8 rounded-[22px] border border-white/[0.07] bg-[#0b0b0b] p-5 sm:p-6">
+
+            <div>
+              <h2 className="text-lg font-semibold">
+                Post Performance
+              </h2>
+
+              <p className="mt-1 text-xs text-gray-600">
+                Every post connected to an automation.
+              </p>
+            </div>
+
+            {allAutomations.length === 0 ? (
+              <div className="mt-6 rounded-xl border border-white/[0.05] p-8 text-center text-sm text-gray-600">
+                No automations created yet.
+              </div>
+            ) : (
+              <div className="mt-6 space-y-4">
+
+                {allAutomations.map(
+                  (automation) => {
+                    const post =
+                      automation.instagram_post_id
+                        ? postMap.get(
+                            automation.instagram_post_id,
+                          )
+                        : null;
+
+                    const comments =
+                      allComments.filter(
+                        (comment) =>
+                          comment.automation_id ===
+                          automation.id,
+                      ).length;
+
+                    const dms =
+                      allComments.filter(
+                        (comment) =>
+                          comment.automation_id ===
+                            automation.id &&
+                          comment.dm_sent,
+                      ).length;
+
+                    const clicks =
+                      allClicks.filter(
+                        (click) =>
+                          click.automation_id ===
+                            automation.id &&
+                          click.clicked_at,
+                      ).length;
+
+                    return (
+                      <div
+                        key={automation.id}
+                        className="rounded-2xl border border-white/[0.06] bg-white/[0.015] p-4"
+                      >
+                        <div className="flex flex-col gap-4 sm:flex-row">
+
+                          <div className="h-28 w-28 shrink-0 overflow-hidden rounded-xl bg-black">
+                            {post?.media_url ? (
+                              post.media_type?.toUpperCase() ===
+                              "VIDEO" ? (
+                                <video
+                                  src={
+                                    post.media_url
+                                  }
+                                  className="h-full w-full object-cover"
+                                  muted
+                                  playsInline
+                                />
+                              ) : (
+                                <img
+                                  src={
+                                    post.media_url
+                                  }
+                                  alt="Instagram post"
+                                  className="h-full w-full object-cover"
+                                />
+                              )
+                            ) : (
+                              <div className="flex h-full items-center justify-center text-xs text-gray-700">
+                                No image
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+
+                            <div className="flex flex-wrap items-center gap-2">
+
+                              <span className="font-semibold">
+                                {getTriggerLabel(
+                                  automation,
+                                )}
+                              </span>
+
+                              <span
+                                className={
+                                  automation.is_active
+                                    ? "rounded-full bg-emerald-500/[0.06] px-2.5 py-1 text-[9px] font-semibold uppercase text-emerald-400"
+                                    : "rounded-full bg-white/[0.04] px-2.5 py-1 text-[9px] font-semibold uppercase text-gray-600"
+                                }
+                              >
+                                {automation.is_active
+                                  ? "ON"
+                                  : "OFF"}
+                              </span>
+
+                            </div>
+
+                            <p className="mt-2 line-clamp-2 text-sm text-gray-500">
+                              {post?.caption ||
+                                "Instagram post"}
+                            </p>
+
+                            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+
+                              <SmallMetric
+                                label="Likes"
+                                value={
+                                  post?.likes_count ??
+                                  0
+                                }
+                              />
+
+                              <SmallMetric
+                                label="Comments"
+                                value={
+                                  post?.comments_count ??
+                                  0
+                                }
+                              />
+
+                              <SmallMetric
+                                label="DMs"
+                                value={dms}
+                              />
+
+                              <SmallMetric
+                                label="Clicks"
+                                value={clicks}
+                              />
+
+                            </div>
+
+                            <div className="mt-4">
+                              <a
+                                href={`/dashboard/analytics?automation_id=${encodeURIComponent(
+                                  automation.id,
+                                )}`}
+                                className="inline-flex items-center rounded-xl border border-[#ff1744]/20 bg-[#ff1744]/[0.04] px-4 py-2 text-xs font-medium text-[#ff6b86] transition-colors hover:border-[#ff1744]/40 hover:bg-[#ff1744]/[0.08] hover:text-white"
+                              >
+                                View Post Analytics →
+                              </a>
+                            </div>
+
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  },
+                )}
+
+              </div>
+            )}
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  /*
+   * ============================================================
+   * POST ANALYTICS VIEW
+   * ============================================================
+   */
+
+  const automation =
+    allAutomations.find(
+      (item) =>
+        item.id === automationId,
+    ) ?? null;
+
+  if (!automation) {
+    return (
+      <main className="min-h-screen bg-[#050505] px-4 py-10 text-white sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-5xl">
+          <div className="rounded-[22px] border border-white/[0.07] bg-[#0b0b0b] p-8 text-center">
+            <h1 className="text-2xl font-semibold">
+              Post analytics not found
+            </h1>
+
+            <p className="mt-2 text-sm text-gray-500">
+              This automation does not exist or does not belong to this account.
+            </p>
+
+            <a
+              href="/dashboard/analytics"
+              className="mt-6 inline-flex rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-2.5 text-xs text-gray-400 hover:bg-white/[0.05] hover:text-white"
+            >
+              ← Account Analytics
+            </a>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  const post =
+    automation.instagram_post_id
+      ? postMap.get(
+          automation.instagram_post_id,
+        ) ?? null
+      : null;
+
+  const comments =
+    allComments.filter(
+      (comment) =>
+        comment.automation_id ===
+        automation.id,
+    );
+
+  const clicks =
+    allClicks.filter(
+      (click) =>
+        click.automation_id ===
+        automation.id,
+    );
+
+  const followups =
+    allFollowups.filter(
+      (followup) =>
+        followup.automation_id ===
+        automation.id,
+    );
+
+  const commentsProcessed =
+    comments.length;
+
+  const initialDmsSent =
+    comments.filter(
+      (comment) => comment.dm_sent,
+    ).length;
+
+  const publicRepliesSent =
+    comments.filter(
+      (comment) =>
+        comment.public_reply_sent,
+    ).length;
+
+  const trackedLinks =
+    clicks.length;
+
+  const linkClicks =
+    clicks.filter(
+      (click) =>
+        Boolean(click.clicked_at),
+    ).length;
+
+  const clickRate =
+    trackedLinks > 0
+      ? (linkClicks /
+          trackedLinks) *
+        100
+      : 0;
+
+  const clickMap = new Map(
+    clicks.map((click) => [
+      click.id,
+      click,
+    ]),
+  );
+
+  const followupsSkipped =
+    followups.filter((followup) =>
+      wasSkipped(
+        followup,
+        clickMap,
+      ),
+    ).length;
+
+  const followupsFailed =
+    followups.filter(
+      (followup) =>
+        Boolean(followup.failed_at),
+    ).length;
+
+  const followupsSent =
+    followups.filter((followup) => {
+      if (
+        !followup.sent_at ||
+        followup.failed_at
+      ) {
+        return false;
+      }
+
+      return !wasSkipped(
+        followup,
+        clickMap,
+      );
+    }).length;
+
+  const pendingFollowups =
+    followups.filter(
+      (followup) =>
+        !followup.sent_at &&
+        !followup.failed_at,
+    ).length;
+
+  const keywords =
+    automation.trigger_keywords
+      ?.length
+      ? automation.trigger_keywords
+      : automation.trigger_keyword
+        ? [automation.trigger_keyword]
+        : [];
+
+  return (
+    <main className="min-h-screen bg-[#050505] text-white">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+
+        {/* HEADER */}
+
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-600">
+              DevilX / Analytics
+            </p>
+
+            <h1 className="mt-2 text-3xl font-bold tracking-[-0.04em]">
+              Post Analytics
+            </h1>
+
+            <p className="mt-2 text-sm text-gray-500">
+              Performance for this Instagram post.
+            </p>
+          </div>
+
+          <a
+            href="/dashboard/analytics"
+            className="inline-flex w-fit items-center rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-2.5 text-xs font-medium text-gray-400 transition-colors hover:border-white/[0.15] hover:bg-white/[0.05] hover:text-white"
+          >
+            ← Account Analytics
+          </a>
+
+        </div>
+
+        {/* ACCOUNT */}
+
+        <section className="mt-7 rounded-[22px] border border-white/[0.07] bg-[#0b0b0b] p-5 sm:p-6">
+
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-600">
+                Instagram Account
+              </p>
+
+              <p className="mt-2 text-lg font-semibold">
+                @{account.username || "Instagram"}
+              </p>
+            </div>
+
+            <span className="w-fit rounded-full border border-emerald-500/10 bg-emerald-500/[0.06] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
+              ● Connected
+            </span>
+
+          </div>
+
+        </section>
+
+        {/* POST */}
+
+        <section className="mt-5 rounded-[22px] border border-white/[0.07] bg-[#0b0b0b] p-5 sm:p-6">
+
+          <div className="flex flex-col gap-5 md:flex-row">
+
+            <div className="h-56 w-full shrink-0 overflow-hidden rounded-2xl border border-white/[0.06] bg-black md:h-64 md:w-64">
+
+              {post?.media_url ? (
+                post.media_type?.toUpperCase() ===
+                "VIDEO" ? (
+                  <video
+                    src={post.media_url}
+                    className="h-full w-full object-cover"
+                    controls
+                    muted
+                    playsInline
+                  />
+                ) : (
+                  <img
+                    src={post.media_url}
+                    alt="Instagram post"
+                    className="h-full w-full object-cover"
+                  />
+                )
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-gray-600">
+                  Post preview unavailable
+                </div>
+              )}
+
+            </div>
+
+            <div className="min-w-0 flex-1">
+
+              <div className="flex flex-wrap items-center gap-2">
+
+                <span className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-1 text-[9px] uppercase tracking-wider text-gray-600">
+                  Post
+                </span>
+
+                <span
+                  className={
+                    automation.is_active
+                      ? "rounded-full bg-emerald-500/[0.06] px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-400"
+                      : "rounded-full bg-white/[0.04] px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500"
+                  }
+                >
+                  {automation.is_active
+                    ? "ON"
+                    : "OFF"}
+                </span>
+
+              </div>
+
+              <h2 className="mt-4 text-xl font-semibold">
+                {getTriggerLabel(
+                  automation,
+                )}
+              </h2>
+
+              {(automation.trigger_type ===
+                "keyword" ||
+                automation.trigger_type ===
+                  "keywords") &&
+                keywords.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {keywords.map(
+                      (keyword) => (
+                        <span
+                          key={keyword}
+                          className="rounded-lg bg-white/[0.04] px-3 py-1.5 text-xs text-gray-400"
+                        >
+                          {keyword}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                )}
+
+              <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-gray-400">
+                {post?.caption ||
+                  "No caption available."}
+              </p>
+
+              <div className="mt-5 flex flex-wrap gap-5 text-xs text-gray-600">
+                <span>
+                  Created:{" "}
+                  {formatDate(
+                    automation.created_at,
+                  )}
+                </span>
+
+                <span>
+                  Updated:{" "}
+                  {formatDate(
+                    automation.updated_at,
+                  )}
+                </span>
+              </div>
+
+            </div>
+          </div>
+        </section>
+
+        {/* POST PERFORMANCE */}
+
+        <section className="mt-7">
+
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">
+              Post Performance
+            </h2>
+
+            <p className="mt-1 text-xs text-gray-600">
+              Instagram numbers for this post.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+
+            <Metric
+              label="Post Likes"
+              value={
+                post?.likes_count ?? 0
+              }
+            />
+
+            <Metric
+              label="Post Comments"
+              value={
+                post?.comments_count ?? 0
+              }
+            />
+
+          </div>
+
+        </section>
+
+        {/* AUTOMATION PERFORMANCE */}
+
+        <section className="mt-7">
+
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">
+              Automation Performance
+            </h2>
+
+            <p className="mt-1 text-xs text-gray-600">
+              Activity generated by this post automation.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
             <Metric
               label="Comments Processed"
               value={commentsProcessed}
-              description="Comments handled by automations"
             />
 
             <Metric
               label="Initial DMs Sent"
               value={initialDmsSent}
-              description="Successful comment-triggered DMs"
+            />
+
+            <Metric
+              label="Public Replies"
+              value={publicRepliesSent}
             />
 
             <Metric
               label="Tracked Links"
               value={trackedLinks}
-              description="Links generated for automation DMs"
             />
+
+          </div>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
             <Metric
               label="Link Clicks"
-              value={linkClicksTotal}
-              description="Tracked links opened"
+              value={linkClicks}
             />
-          </div>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Metric
               label="Click Rate"
-              value={Number(clickRate.toFixed(1))}
+              value={Number(
+                clickRate.toFixed(1),
+              )}
               suffix="%"
-              description="Clicks ÷ tracked links"
             />
 
             <Metric
               label="Follow-ups Sent"
-              value={sentFollowups}
-              description="Follow-ups actually delivered"
+              value={followupsSent}
             />
 
             <Metric
               label="Follow-ups Skipped"
-              value={skippedFollowups}
-              description="Skipped after link was clicked"
+              value={followupsSkipped}
             />
+
+          </div>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
 
             <Metric
               label="Follow-ups Failed"
-              value={failedFollowups}
-              description="Follow-ups rejected by Instagram/API"
+              value={followupsFailed}
             />
-          </div>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-3">
             <Metric
               label="Pending Follow-ups"
               value={pendingFollowups}
-              description="Not processed yet"
             />
 
-            <Metric
-              label="Public Replies Sent"
-              value={publicRepliesSent}
-              description="Successful public comment replies"
-            />
-
-            <Metric
-              label="Total Automations"
-              value={totalAutomations}
-              description="Automations for this account"
-            />
           </div>
 
-          {/* AUTOMATION STATUS */}
+        </section>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-3">
-            <Metric
-              label="Active Automations"
-              value={activeAutomations}
-              description="Currently enabled"
-            />
+        {/* FOLLOW-UP */}
 
-            <Metric
-              label="Inactive Automations"
-              value={inactiveAutomations}
-              description="Currently disabled"
-            />
+        <section className="mt-7 rounded-[22px] border border-white/[0.07] bg-[#0b0b0b] p-5 sm:p-6">
 
-            <Metric
-              label="Automation DMs"
-              value={initialDmsSent}
-              description="Total initial DMs sent"
-            />
-          </div>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
-          {/* ==================================================
-              PER-AUTOMATION PERFORMANCE
-              ================================================== */}
-
-          <div className="mt-10 rounded-2xl border border-white/10 bg-white/[0.04] p-5 sm:p-6">
             <div>
-              <h2 className="text-xl font-semibold">
-                Per-Automation Performance
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-600">
+                Follow-up
+              </p>
+
+              <h2 className="mt-2 text-lg font-semibold">
+                {automation.followup_enabled
+                  ? "Follow-up is ON"
+                  : "Follow-up is OFF"}
               </h2>
 
               <p className="mt-1 text-sm text-gray-500">
-                Every number below is calculated from the actual
-                automation records in Supabase.
+                {automation.followup_enabled
+                  ? `Configured for ${getFollowupDelayLabel(
+                      automation.followup_delay_minutes,
+                    )}.`
+                  : "No follow-up will be sent."}
               </p>
             </div>
 
-            {automations.length === 0 ? (
-              <div className="mt-6 rounded-xl border border-white/5 p-8 text-center text-gray-500">
-                No automations created yet.
-              </div>
-            ) : (
-              <div className="mt-6 space-y-5">
-                {automations.map((automation) => {
-                  const post = automation.instagram_post_id
-                    ? postMap.get(automation.instagram_post_id)
-                    : null;
+            <span
+              className={
+                automation.followup_enabled
+                  ? "w-fit rounded-full bg-emerald-500/[0.06] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400"
+                  : "w-fit rounded-full bg-white/[0.04] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500"
+              }
+            >
+              {automation.followup_enabled
+                ? "ON"
+                : "OFF"}
+            </span>
 
-                  const automationComments =
-                    commentsByAutomation.get(automation.id) ?? 0;
+          </div>
 
-                  const automationDms =
-                    dmsByAutomation.get(automation.id) ?? 0;
+        </section>
 
-                  const automationPublicReplies =
-                    publicRepliesByAutomation.get(automation.id) ?? 0;
+        {/* MESSAGES */}
 
-                  const automationTrackedLinks =
-                    trackedLinksByAutomation.get(automation.id) ?? 0;
+        <section className="mt-7 rounded-[22px] border border-white/[0.07] bg-[#0b0b0b] p-5 sm:p-6">
 
-                  const automationClicks =
-                    clicksByAutomation.get(automation.id) ?? 0;
+          <h2 className="text-lg font-semibold">
+            Automation Messages
+          </h2>
 
-                  const automationClickRate =
-                    automationTrackedLinks > 0
-                      ? (
-                          (automationClicks /
-                            automationTrackedLinks) *
-                          100
-                        ).toFixed(1)
-                      : "0.0";
+          {automation.dm_message && (
+            <div className="mt-5 rounded-xl border border-white/[0.05] bg-white/[0.02] p-4">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-gray-700">
+                Initial DM
+              </p>
 
-                  const automationFollowupsSent =
-                    followupsSentByAutomation.get(automation.id) ?? 0;
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-400">
+                {automation.dm_message}
+              </p>
+            </div>
+          )}
 
-                  const automationFollowupsSkipped =
-                    followupsSkippedByAutomation.get(automation.id) ?? 0;
+          {automation.reply_enabled &&
+            automation.reply_text && (
+              <div className="mt-3 rounded-xl border border-white/[0.05] bg-white/[0.02] p-4">
+                <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-gray-700">
+                  Public Reply
+                </p>
 
-                  const automationFollowupsFailed =
-                    followupsFailedByAutomation.get(automation.id) ?? 0;
-
-                  const automationPendingFollowups =
-                    pendingFollowupsByAutomation.get(automation.id) ?? 0;
-
-                  return (
-                    <div
-                      key={automation.id}
-                      className="rounded-xl border border-white/10 bg-black/20 p-5"
-                    >
-                      {/* HEADER */}
-
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <h3 className="text-lg font-semibold">
-                              {getTriggerLabel(automation)}
-                            </h3>
-
-                            <span
-                              className={
-                                automation.is_active
-                                  ? "rounded-full bg-green-500/10 px-3 py-1 text-xs text-green-400"
-                                  : "rounded-full bg-white/10 px-3 py-1 text-xs text-gray-500"
-                              }
-                            >
-                              {automation.is_active
-                                ? "Active"
-                                : "Inactive"}
-                            </span>
-
-                            {automation.followup_enabled && (
-                              <span className="rounded-full bg-blue-500/10 px-3 py-1 text-xs text-blue-400">
-                                Follow-up ON
-                              </span>
-                            )}
-                          </div>
-
-                          {automation.trigger_type === "keyword" && (
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {(automation.trigger_keywords?.length
-                                ? automation.trigger_keywords
-                                : automation.trigger_keyword
-                                  ? [automation.trigger_keyword]
-                                  : []
-                              ).map((keyword) => (
-                                <span
-                                  key={keyword}
-                                  className="rounded-lg bg-white/5 px-2.5 py-1 text-xs text-gray-400"
-                                >
-                                  {keyword}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-
-                          <p className="mt-3 text-sm text-gray-400">
-                            {post?.caption || "Instagram post"}
-                          </p>
-
-                          {post?.instagram_media_id && (
-                            <p className="mt-2 text-xs text-gray-600">
-                              Instagram Media ID:{" "}
-                              {post.instagram_media_id}
-                            </p>
-                          )}
-
-                          <p className="mt-1 text-xs text-gray-700">
-                            Automation ID: {automation.id}
-                          </p>
-                        </div>
-
-                        <div className="shrink-0 text-xs text-gray-600">
-                          Updated {formatDate(automation.updated_at)}
-                        </div>
-                      </div>
-
-                      {/* METRICS */}
-
-                      <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-                        <SmallMetric
-                          label="Comments Processed"
-                          value={automationComments}
-                        />
-
-                        <SmallMetric
-                          label="Initial DMs Sent"
-                          value={automationDms}
-                        />
-
-                        <SmallMetric
-                          label="Tracked Links"
-                          value={automationTrackedLinks}
-                        />
-
-                        <SmallMetric
-                          label="Link Clicks"
-                          value={automationClicks}
-                        />
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-                        <SmallMetric
-                          label="Click Rate"
-                          value={`${automationClickRate}%`}
-                        />
-
-                        <SmallMetric
-                          label="Follow-ups Sent"
-                          value={automationFollowupsSent}
-                        />
-
-                        <SmallMetric
-                          label="Follow-ups Skipped"
-                          value={automationFollowupsSkipped}
-                        />
-
-                        <SmallMetric
-                          label="Follow-ups Failed"
-                          value={automationFollowupsFailed}
-                        />
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-                        <SmallMetric
-                          label="Pending Follow-ups"
-                          value={automationPendingFollowups}
-                        />
-
-                        <SmallMetric
-                          label="Public Replies Sent"
-                          value={automationPublicReplies}
-                        />
-
-                        <SmallMetric
-                          label="Button"
-                          value={
-                            automation.button_name
-                              ? "Enabled"
-                              : "None"
-                          }
-                        />
-
-                        <SmallMetric
-                          label="Follow-up"
-                          value={
-                            automation.followup_enabled
-                              ? "Enabled"
-                              : "Disabled"
-                          }
-                        />
-                      </div>
-
-                      {/* MESSAGES */}
-
-                      {automation.dm_message && (
-                        <div className="mt-4 rounded-lg bg-white/[0.03] p-4">
-                          <p className="text-xs text-gray-600">
-                            Initial DM
-                          </p>
-
-                          <p className="mt-1 whitespace-pre-wrap text-sm text-gray-400">
-                            {automation.dm_message}
-                          </p>
-                        </div>
-                      )}
-
-                      {automation.reply_enabled &&
-                        automation.reply_text && (
-                          <div className="mt-3 rounded-lg bg-white/[0.03] p-4">
-                            <p className="text-xs text-gray-600">
-                              Public Reply
-                            </p>
-
-                            <p className="mt-1 whitespace-pre-wrap text-sm text-gray-400">
-                              {automation.reply_text}
-                            </p>
-                          </div>
-                        )}
-                    </div>
-                  );
-                })}
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-400">
+                  {automation.reply_text}
+                </p>
               </div>
             )}
-          </div>
 
-          {/* DATA SOURCE */}
+          {automation.button_name &&
+            automation.button_url && (
+              <div className="mt-3 rounded-xl border border-white/[0.05] bg-white/[0.02] p-4">
+                <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-gray-700">
+                  Button
+                </p>
 
-          <div className="mt-6 rounded-2xl border border-green-500/20 bg-green-500/[0.04] p-5">
-            <p className="font-semibold text-green-400">
-              Analytics source
-            </p>
+                <p className="mt-2 text-sm text-gray-400">
+                  {automation.button_name}
+                </p>
 
-            <p className="mt-2 text-sm leading-6 text-gray-400">
-              Comments come from{" "}
-              <code className="text-gray-300">
-                instagram_comments
-              </code>
-              . Initial DMs and public replies use the recorded
-              success flags. Tracked links and clicks come from{" "}
-              <code className="text-gray-300">
-                instagram_automation_link_clicks
-              </code>
-              . Follow-up delivery, skipped, failed and pending
-              states come from{" "}
-              <code className="text-gray-300">
-                instagram_automation_followups
-              </code>
-              .
-            </p>
+                <p className="mt-1 break-all text-xs text-gray-600">
+                  {automation.button_url}
+                </p>
+              </div>
+            )}
 
-            <p className="mt-2 text-xs text-gray-600">
-              These are all-time totals for the data currently stored
-              in Supabase.
-            </p>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
+        </section>
 
-function Metric({
-  label,
-  value,
-  suffix = "",
-  description,
-}: {
-  label: string;
-  value: number;
-  suffix?: string;
-  description?: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-[#0d0d0d] p-5">
-      <p className="text-sm text-gray-500">{label}</p>
-
-      <p className="mt-3 text-3xl font-bold">
-        {value.toLocaleString("en-IN")}
-        {suffix}
-      </p>
-
-      {description && (
-        <p className="mt-2 text-xs text-gray-600">
-          {description}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function SmallMetric({
-  label,
-  value,
-}: {
-  label: string;
-  value: number | string;
-}) {
-  return (
-    <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-      <p className="text-xs text-gray-600">{label}</p>
-
-      <p className="mt-1 text-lg font-semibold text-gray-300">
-        {typeof value === "number"
-          ? value.toLocaleString("en-IN")
-          : value}
-      </p>
-    </div>
+      </div>
+    </main>
   );
 }

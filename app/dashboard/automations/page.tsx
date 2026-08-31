@@ -1098,6 +1098,17 @@ export default async function AutomationsPage() {
                             Edit
                           </Link>
 
+                          {/* ANALYTICS */}
+
+                          <Link
+                            href={`/dashboard/analytics?automation_id=${encodeURIComponent(
+                              automation.id
+                            )}`}
+                            className="inline-flex min-w-[96px] items-center justify-center rounded-xl border border-[#ff1744]/20 bg-[#ff1744]/[0.04] px-4 py-2.5 text-xs font-medium text-[#ff6b86] transition-colors hover:border-[#ff1744]/40 hover:bg-[#ff1744]/[0.08] hover:text-white"
+                          >
+                            Analytics
+                          </Link>
+
                           {/* DUPLICATE */}
 
                           <DuplicateAutomationButton
