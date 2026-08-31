@@ -631,13 +631,13 @@ export default async function AutomationsPage() {
 
       <header className="border-b border-white/[0.06] bg-[#070707]">
 
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-8 py-7">
+        <div className="mx-auto flex max-w-7xl flex-col items-stretch gap-5 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-6 lg:px-8 lg:py-7">
 
           <div>
 
             <Link
               href="/dashboard"
-              className="inline-flex items-center gap-2 text-xs font-medium text-gray-600 transition-colors hover:text-white"
+              className="inline-flex w-fit items-center gap-2 text-xs font-medium text-gray-600 transition-colors hover:text-white"
             >
               <span className="text-base">
                 ←
@@ -656,7 +656,7 @@ export default async function AutomationsPage() {
 
             </div>
 
-            <h1 className="mt-3 text-3xl font-bold tracking-[-0.04em]">
+            <h1 className="mt-3 text-2xl font-bold tracking-[-0.04em] sm:text-3xl">
               Automations
             </h1>
 
@@ -668,7 +668,7 @@ export default async function AutomationsPage() {
 
           <Link
             href="/dashboard/automations/new"
-            className="inline-flex items-center gap-2 rounded-xl bg-[#ff1744] px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-[#ff1744]/10 transition-colors hover:bg-[#e9143d]"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff1744] px-5 py-3 sm:w-auto text-sm font-semibold text-white shadow-lg shadow-[#ff1744]/10 transition-colors hover:bg-[#e9143d]"
           >
             <span className="text-lg leading-none">
               +
@@ -685,13 +685,13 @@ export default async function AutomationsPage() {
           CONTENT
       ==================================================== */}
 
-      <div className="mx-auto max-w-7xl px-8 py-9">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-9">
 
         {/* ==================================================
             STATS
         ================================================== */}
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 
           <Stat
             title="Total Automations"
@@ -723,9 +723,9 @@ export default async function AutomationsPage() {
             AUTOMATION LIST
         ================================================== */}
 
-        <div className="mt-8">
+        <div className="mt-6 sm:mt-8">
 
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
             <div>
 
@@ -759,7 +759,7 @@ export default async function AutomationsPage() {
 
             {list.length === 0 ? (
 
-              <div className="rounded-[24px] border border-white/[0.07] bg-[#0b0b0b] px-6 py-16 text-center">
+              <div className="rounded-[24px] border border-white/[0.07] bg-[#0b0b0b] px-4 py-12 text-center sm:px-6 sm:py-16">
 
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[#ff1744]/10 bg-[#ff1744]/[0.05] text-xl text-[#ff1744]">
                   ⚡
@@ -775,7 +775,7 @@ export default async function AutomationsPage() {
 
                 <Link
                   href="/dashboard/automations/new"
-                  className="mt-7 inline-flex items-center gap-2 rounded-xl bg-[#ff1744] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#e9143d]"
+                  className="mt-7 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff1744] px-5 py-3 sm:w-auto text-sm font-semibold text-white transition-colors hover:bg-[#e9143d]"
                 >
                   <span className="text-lg">
                     +
@@ -827,16 +827,16 @@ export default async function AutomationsPage() {
                       key={
                         automation.id
                       }
-                      className="group rounded-[22px] border border-white/[0.07] bg-[#0b0b0b] p-5 transition-colors duration-200 hover:border-white/[0.12] hover:bg-[#0d0d0d]"
+                      className="group rounded-[22px] border border-white/[0.07] bg-[#0b0b0b] p-4 transition-colors sm:p-5 duration-200 hover:border-white/[0.12] hover:bg-[#0d0d0d]"
                     >
 
-                      <div className="flex flex-col gap-5 xl:flex-row xl:items-center">
+                      <div className="flex flex-col gap-4 md:gap-5 xl:flex-row xl:items-center">
 
                         {/* ======================================
                             POST PREVIEW
                         ====================================== */}
 
-                        <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-white/[0.06] bg-black">
+                        <div className="h-20 w-20 shrink-0 sm:h-24 sm:w-24 overflow-hidden rounded-xl border border-white/[0.06] bg-black">
 
                           {automation.post?.media_url ? (
 
@@ -1068,14 +1068,14 @@ export default async function AutomationsPage() {
                             ACTIONS
                         ====================================== */}
 
-                        <div className="flex shrink-0 items-center gap-2 xl:flex-col">
+                        <div className="grid w-full shrink-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center xl:flex xl:w-auto xl:flex-col">
 
                           {/* ====================================
                               SIMPLE ON / OFF TOGGLE
                           ==================================== */}
 
                           {!isScheduledAutomation && (
-                            <div className="mb-1 flex items-center justify-center">
+                            <div className="col-span-2 mb-1 flex items-center justify-center sm:col-span-1">
 
                               <AutomationToggle
                                 automationId={
@@ -1093,7 +1093,7 @@ export default async function AutomationsPage() {
 
                           <Link
                             href={`/dashboard/automations/${automation.id}/edit`}
-                            className="inline-flex min-w-[96px] items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-2.5 text-xs font-medium text-gray-400 transition-colors hover:border-white/[0.15] hover:bg-white/[0.05] hover:text-white"
+                            className="inline-flex min-h-10 w-full items-center justify-center rounded-xl sm:min-w-[96px] sm:w-auto border border-white/[0.08] bg-white/[0.02] px-4 py-2.5 text-xs font-medium text-gray-400 transition-colors hover:border-white/[0.15] hover:bg-white/[0.05] hover:text-white"
                           >
                             Edit
                           </Link>
@@ -1104,7 +1104,7 @@ export default async function AutomationsPage() {
                             href={`/dashboard/analytics?automation_id=${encodeURIComponent(
                               automation.id
                             )}`}
-                            className="inline-flex min-w-[96px] items-center justify-center rounded-xl border border-[#ff1744]/20 bg-[#ff1744]/[0.04] px-4 py-2.5 text-xs font-medium text-[#ff6b86] transition-colors hover:border-[#ff1744]/40 hover:bg-[#ff1744]/[0.08] hover:text-white"
+                            className="inline-flex min-h-10 w-full items-center justify-center rounded-xl sm:min-w-[96px] sm:w-auto border border-[#ff1744]/20 bg-[#ff1744]/[0.04] px-4 py-2.5 text-xs font-medium text-[#ff6b86] transition-colors hover:border-[#ff1744]/40 hover:bg-[#ff1744]/[0.08] hover:text-white"
                           >
                             Analytics
                           </Link>
@@ -1182,7 +1182,7 @@ function Stat({
         : "text-white";
 
   return (
-    <div className="rounded-[22px] border border-white/[0.07] bg-[#0b0b0b] p-6">
+    <div className="rounded-[22px] border border-white/[0.07] bg-[#0b0b0b] p-5 sm:p-6">
 
       <div className="flex items-center justify-between">
 
@@ -1201,7 +1201,7 @@ function Stat({
       </div>
 
       <p
-        className={`mt-5 text-3xl font-bold tracking-[-0.04em] ${valueClass}`}
+        className={`mt-5 text-2xl font-bold tracking-[-0.04em] sm:text-3xl ${valueClass}`}
       >
         {value}
       </p>
