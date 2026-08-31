@@ -400,7 +400,10 @@ export default async function EditAutomationPage({
     const replyEnabled =
       formData.get(
         "reply_enabled"
-      ) === "on";
+      ) === "on" ||
+      formData.get(
+        "reply_enabled"
+      ) === "true";
 
     const replyTexts = Array.from(
       new Set(
@@ -632,6 +635,7 @@ export default async function EditAutomationPage({
     );
 
     const {
+      data: updatedAutomation,
       error: updateError,
     } = await supabase
       .from(
@@ -730,7 +734,29 @@ export default async function EditAutomationPage({
       .eq(
         "user_id",
         user.id
-      );
+      )
+      .select(
+        `
+        id,
+        name,
+        instagram_post_id,
+        trigger_type,
+        trigger_keywords,
+        trigger_keyword,
+        dm_message,
+        reply_enabled,
+        reply_text,
+        reply_texts,
+        button_name,
+        button_url,
+        followup_enabled,
+        followup_delay_minutes,
+        followup_message,
+        is_active,
+        updated_at
+        `
+      )
+      .maybeSingle();
 
     if (updateError) {
       console.error(
@@ -747,9 +773,30 @@ export default async function EditAutomationPage({
 
     /*
      * =======================================================
-     * SUCCESS
+     * VERIFY THAT A ROW WAS ACTUALLY UPDATED
      * =======================================================
      */
+
+    if (!updatedAutomation) {
+      console.error(
+        "AUTOMATION UPDATE AFFECTED ZERO ROWS",
+        {
+          automationId: id,
+          userId: user.id,
+        }
+      );
+
+      redirect(
+        `/dashboard/automations/${id}/edit?error=${encodeURIComponent(
+          "The automation could not be updated. No row was changed. Check the automation ID, user ID, and Supabase RLS policy."
+        )}`
+      );
+    }
+
+    console.log(
+      "AUTOMATION UPDATED SUCCESSFULLY:",
+      updatedAutomation
+    );
 
     redirect(
       "/dashboard/automations"

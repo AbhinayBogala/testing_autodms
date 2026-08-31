@@ -12,11 +12,15 @@ export default function AutomationStatusToggle({
   const [enabled, setEnabled] =
     useState(defaultChecked);
 
+  const toggle = () => {
+    setEnabled((current) => !current);
+  };
+
   return (
     <div className="flex items-center gap-3">
-
+      {/* ON / OFF indicator */}
       <span
-        className={`text-xs font-medium transition-colors ${
+        className={`text-xs font-semibold transition-colors ${
           enabled
             ? "text-emerald-400"
             : "text-gray-500"
@@ -25,16 +29,13 @@ export default function AutomationStatusToggle({
         {enabled ? "ON" : "OFF"}
       </span>
 
+      {/* Toggle */}
       <button
         type="button"
         role="switch"
         aria-checked={enabled}
-        onClick={() =>
-          setEnabled(
-            (current) =>
-              !current,
-          )
-        }
+        aria-label="Turn automation on or off"
+        onClick={toggle}
         className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-white/10 ${
           enabled
             ? "bg-emerald-500"
@@ -50,20 +51,17 @@ export default function AutomationStatusToggle({
         />
       </button>
 
-      {/* IMPORTANT:
-          This hidden checkbox is what the
-          server action receives. */}
-
+      {/* 
+        IMPORTANT:
+        Always submit a value to the server.
+        ON  -> "on"
+        OFF -> "off"
+      */}
       <input
-        type="checkbox"
+        type="hidden"
         name="is_active"
-        checked={enabled}
-        onChange={() => {}}
-        tabIndex={-1}
-        aria-hidden="true"
-        className="sr-only"
+        value={enabled ? "on" : "off"}
       />
-
     </div>
   );
 }
