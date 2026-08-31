@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 
 import PostSelector from "../../new/PostSelector";
 import AutomationLivePreview from "../../new/AutomationLivePreview";
+import AutomationFlowEditor, { type AutomationFlowMessage } from "../../new/AutomationFlowEditor";
 import ReplyFieldsEditor from "./ReplyFieldsEditor";
 import AutomationStatusToggle from "../../new/AutomationStatusToggle";
 import TriggerTypeSelector from "./TriggerTypeSelector";
@@ -16,6 +17,64 @@ export const dynamic = "force-dynamic";
  * TYPES
  * =========================================================
  */
+
+
+type FlowButton = {
+  id: string;
+  label: string;
+  action: "link" | "flow";
+  url?: string;
+  targetMessageId?: string;
+};
+
+function parseAutomationFlow(value: unknown): AutomationFlowMessage[] {
+  if (!Array.isArray(value) || value.length === 0) return [];
+
+  return value
+    .map((raw, index) => {
+      const item = raw as Partial<AutomationFlowMessage> | null;
+      const buttons = Array.isArray(item?.buttons)
+        ? item.buttons.map((rawButton, buttonIndex) => {
+            const button = rawButton as Partial<FlowButton> | null;
+            const action: "link" | "flow" =
+              button?.action === "flow" ? "flow" : "link";
+
+            return {
+              id: String(button?.id || `button_${index + 1}_${buttonIndex + 1}`),
+              label: String(button?.label || "").trim(),
+              action,
+              ...(button?.url ? { url: String(button.url).trim() } : {}),
+              ...(button?.targetMessageId
+                ? { targetMessageId: String(button.targetMessageId) }
+                : {}),
+            } satisfies AutomationFlowMessage["buttons"][number];
+          })
+        : [];
+
+      return {
+        id: String(item?.id || `message_${index + 1}`),
+        message: String(item?.message || ""),
+        buttons,
+      } satisfies AutomationFlowMessage;
+    })
+    .filter((message) => message.id && message.message.trim().length > 0);
+}
+
+function firstLinkButton(flow: AutomationFlowMessage[]) {
+  for (const message of flow) {
+    for (const button of message.buttons) {
+      if (
+        button.action === "link" &&
+        button.label.trim() &&
+        button.url?.trim()
+      ) {
+        return button;
+      }
+    }
+  }
+
+  return null;
+}
 
 type PageProps = {
   params: Promise<{
@@ -50,6 +109,7 @@ type Automation = {
   trigger_keyword: string | null;
 
   dm_message: string;
+  dm_flow: AutomationFlowMessage[] | null;
 
   reply_enabled: boolean | null;
   reply_text: string | null;
@@ -133,6 +193,7 @@ export default async function EditAutomationPage({
       trigger_keywords,
       trigger_keyword,
       dm_message,
+      dm_flow,
       reply_enabled,
       reply_text,
       reply_texts,
@@ -189,6 +250,31 @@ export default async function EditAutomationPage({
   }
 
   const automationData: Automation = automation;
+
+  const currentDmFlow =
+    parseAutomationFlow(automationData.dm_flow);
+
+  const initialDmFlow: AutomationFlowMessage[] =
+    currentDmFlow.length > 0
+      ? currentDmFlow
+      : [
+          {
+            id: "message_1",
+            message: automationData.dm_message ?? "",
+            buttons:
+              automationData.button_name &&
+              automationData.button_url
+                ? [
+                    {
+                      id: "button_1",
+                      label: automationData.button_name,
+                      action: "link",
+                      url: automationData.button_url,
+                    },
+                  ]
+                : [],
+          },
+        ];
 
   /*
    * =========================================================
@@ -382,15 +468,34 @@ export default async function EditAutomationPage({
 
     /*
      * =======================================================
-     * DM MESSAGE
+     * DM FLOW
      * =======================================================
      */
 
-    const dmMessage = String(
-      formData.get(
-        "dm_message"
-      ) ?? ""
-    ).trim();
+    const rawFlow = String(
+      formData.get("dm_flow") ?? "[]"
+    );
+
+    let dmFlow: AutomationFlowMessage[] = [];
+
+    try {
+      dmFlow = parseAutomationFlow(JSON.parse(rawFlow));
+    } catch {
+      redirect(
+        `/dashboard/automations/${id}/edit?error=Invalid+DM+flow.`
+      );
+    }
+
+    const dmMessage =
+      dmFlow[0]?.message.trim() || "";
+
+    const flowLinkButton = firstLinkButton(dmFlow);
+
+    // Legacy columns are kept populated for compatibility.
+    const buttonName =
+      flowLinkButton?.label.trim() || "";
+    const buttonUrl =
+      flowLinkButton?.url?.trim() || "";
 
     /*
      * =======================================================
@@ -426,23 +531,7 @@ export default async function EditAutomationPage({
     const replyText =
       replyTexts[0] ?? "";
 
-    /*
-     * =======================================================
-     * CUSTOM BUTTON
-     * =======================================================
-     */
 
-    const buttonName = String(
-      formData.get(
-        "button_name"
-      ) ?? ""
-    ).trim();
-
-    const buttonUrl = String(
-      formData.get(
-        "button_url"
-      ) ?? ""
-    ).trim();
 
     /*
      * =======================================================
@@ -534,10 +623,66 @@ export default async function EditAutomationPage({
       );
     }
 
-    if (!dmMessage) {
+    if (!dmFlow.length || !dmMessage) {
       redirect(
-        `/dashboard/automations/${id}/edit?error=Please+enter+a+DM+message.`
+        `/dashboard/automations/${id}/edit?error=Please+add+at+least+one+DM+flow+message.`
       );
+    }
+
+    // Repair Flow buttons whose destination is missing/stale. This can happen
+    // when an older automation was created before the destination message was
+    // added or when a message was removed. Prefer the next available message.
+    dmFlow = dmFlow.map((message) => ({
+      ...message,
+      buttons: message.buttons.map((button) => {
+        if (button.action !== "flow") return button;
+
+        const targetStillExists = button.targetMessageId
+          ? dmFlow.some((target) => target.id === button.targetMessageId)
+          : false;
+
+        if (targetStillExists) return button;
+
+        const fallbackTarget = dmFlow.find(
+          (target) => target.id !== message.id,
+        )?.id;
+
+        return fallbackTarget
+          ? { ...button, targetMessageId: fallbackTarget }
+          : button;
+      }),
+    }));
+
+    for (const message of dmFlow) {
+      if (!message.message.trim()) {
+        redirect(
+          `/dashboard/automations/${id}/edit?error=Every+DM+flow+message+must+contain+text.`
+        );
+      }
+
+      for (const button of message.buttons) {
+        if (!button.label.trim()) {
+          redirect(
+            `/dashboard/automations/${id}/edit?error=Every+DM+flow+button+must+have+a+name.`
+          );
+        }
+
+        if (button.action === "link" && !button.url?.trim()) {
+          redirect(
+            `/dashboard/automations/${id}/edit?error=Every+Main+Link+button+must+have+a+URL.`
+          );
+        }
+
+        if (
+          button.action === "flow" &&
+          (!button.targetMessageId ||
+            !dmFlow.some((target) => target.id === button.targetMessageId))
+        ) {
+          redirect(
+            `/dashboard/automations/${id}/edit?error=Every+Flow+button+must+point+to+a+valid+message.`
+          );
+        }
+      }
     }
 
     if (
@@ -672,6 +817,9 @@ export default async function EditAutomationPage({
         dm_message:
           dmMessage,
 
+        dm_flow:
+          dmFlow,
+
         /*
          * PUBLIC REPLY
          */
@@ -745,6 +893,7 @@ export default async function EditAutomationPage({
         trigger_keywords,
         trigger_keyword,
         dm_message,
+         dm_flow,
         reply_enabled,
         reply_text,
         reply_texts,
@@ -1112,97 +1261,21 @@ export default async function EditAutomationPage({
                   {/* =================================================
                       DM
                   ================================================= */}
-
                   <div>
 
                     <h2 className="text-lg font-semibold">
-                      4. DM Message
+                      4. DM Flow
                     </h2>
 
                     <p className="mt-2 text-sm text-gray-500">
-                      This message will
-                      be sent when the
-                      trigger matches.
+                      Build the complete Instagram DM journey. Add messages and give each button either a Main Link or a Flow action.
                     </p>
 
-                    <label
-                      htmlFor="dm_message"
-                      className="mt-5 mb-2 block text-sm font-medium"
-                    >
-                      Message
-                    </label>
-
-                    <textarea
-                      id="dm_message"
-                      name="dm_message"
-                      required
-                      rows={7}
-                      maxLength={2000}
-                      defaultValue={
-                        automationData.dm_message
-                      }
-                      placeholder={`Hey! 👋
-
-Thanks for commenting!
-
-Here's the link:
-https://example.com`}
-                      className="w-full resize-y rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm leading-6 outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
+                    <AutomationFlowEditor
+                      initialFlow={initialDmFlow}
                     />
 
-                    {/* =================================================
-                        BUTTON
-                    ================================================= */}
 
-                    <div className="mt-6 space-y-4">
-
-                      <div>
-
-                        <label
-                          htmlFor="button_name"
-                          className="mb-2 block text-sm font-medium"
-                        >
-                          Custom Button Name
-                        </label>
-
-                        <input
-                          id="button_name"
-                          name="button_name"
-                          maxLength={20}
-                          defaultValue={
-                            automationData.button_name ??
-                            ""
-                          }
-                          placeholder="Get Course"
-                          className="w-full rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
-                        />
-
-                      </div>
-
-                      <div>
-
-                        <label
-                          htmlFor="button_url"
-                          className="mb-2 block text-sm font-medium"
-                        >
-                          Button URL
-                        </label>
-
-                        <input
-                          id="button_url"
-                          name="button_url"
-                          type="url"
-                          defaultValue={
-                            automationData.button_url ??
-                            ""
-                          }
-                          placeholder="https://example.com"
-                          className="w-full rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
-                        />
-
-                      </div>
-
-                    </div>
 
                     {/* =================================================
                         PUBLIC REPLY
