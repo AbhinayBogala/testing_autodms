@@ -7,6 +7,7 @@ import PostSelector from "../../new/PostSelector";
 import AutomationLivePreview from "../../new/AutomationLivePreview";
 import ReplyFieldsEditor from "./ReplyFieldsEditor";
 import AutomationStatusToggle from "../../new/AutomationStatusToggle";
+import TriggerTypeSelector from "./TriggerTypeSelector";
 
 export const dynamic = "force-dynamic";
 
@@ -1092,116 +1093,18 @@ export default async function EditAutomationPage({
                   ================================================= */}
 
                   <div className="trigger-section">
-
                     <h2 className="text-lg font-semibold">
                       3. Trigger
                     </h2>
 
                     <p className="mt-2 text-sm text-gray-500">
-                      Choose what should
-                      cause the DM to be
-                      sent.
+                      Choose what should cause the DM to be sent.
                     </p>
 
-                    <div className="mt-5 space-y-3">
-
-                      {/* KEYWORDS */}
-
-                      <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 transition hover:bg-white/[0.04]">
-
-                        <input
-                          type="radio"
-                          name="trigger_type"
-                          value="keywords"
-                          defaultChecked={
-                            currentTriggerType ===
-                            "keywords"
-                          }
-                          className="mt-1 h-4 w-4 accent-[#ff1744]"
-                        />
-
-                        <div>
-
-                          <p className="font-medium">
-                            Specific keywords
-                          </p>
-
-                          <p className="mt-1 text-xs text-gray-500">
-                            Send the DM when a
-                            comment contains
-                            any of your
-                            keywords.
-                          </p>
-
-                        </div>
-
-                      </label>
-
-                      {/* ANY COMMENT */}
-
-                      <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 transition hover:bg-white/[0.04]">
-
-                        <input
-                          type="radio"
-                          name="trigger_type"
-                          value="any_comment"
-                          defaultChecked={
-                            currentTriggerType ===
-                            "any_comment"
-                          }
-                          className="mt-1 h-4 w-4 accent-[#ff1744]"
-                        />
-
-                        <div>
-
-                          <p className="font-medium">
-                            Any comment
-                          </p>
-
-                          <p className="mt-1 text-xs text-gray-500">
-                            Send the DM for
-                            every comment on
-                            this post.
-                          </p>
-
-                        </div>
-
-                      </label>
-
-                    </div>
-
-                    <div className="keywords-field mt-6">
-
-                      <label
-                        htmlFor="trigger_keywords"
-                        className="mb-2 block text-sm font-medium"
-                      >
-                        Keywords
-                      </label>
-
-                      <textarea
-                        id="trigger_keywords"
-                        name="trigger_keywords"
-                        rows={4}
-                        maxLength={1000}
-                        defaultValue={
-                          currentKeywords.join(
-                            ", "
-                          )
-                        }
-                        placeholder="link, price, details"
-                        className="w-full resize-y rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm leading-6 outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
-                      />
-
-                      <p className="mt-2 text-xs text-gray-600">
-                        Separate keywords
-                        with commas or put
-                        each keyword on a
-                        new line.
-                      </p>
-
-                    </div>
-
+                    <TriggerTypeSelector
+                      initialTriggerType={currentTriggerType}
+                      initialKeywords={currentKeywords}
+                    />
                   </div>
 
                   <div className="my-8 h-px bg-white/10" />

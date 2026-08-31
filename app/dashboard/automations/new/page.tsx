@@ -2,6 +2,7 @@ import PostSelector from "./PostSelector";
 import ReplyFieldsEditor from "../[id]/edit/ReplyFieldsEditor";
 import AutomationLivePreview from "./AutomationLivePreview";
 import AutomationStatusToggle from "./AutomationStatusToggle";
+import TriggerTypeSelector from "../[id]/edit/TriggerTypeSelector";
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -174,7 +175,8 @@ export default async function NewAutomationPage({
       );
 
     const replyEnabled =
-      rawReplyEnabled === "true";
+      rawReplyEnabled === "true" ||
+      rawReplyEnabled === "on";
 
     const replyTexts =
       Array.from(
@@ -1151,88 +1153,10 @@ export default async function NewAutomationPage({
                       sent.
                     </p>
 
-                    <div className="mt-5 space-y-3">
-
-                      <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 transition hover:bg-white/[0.04]">
-
-                        <input
-                          type="radio"
-                          name="trigger_type"
-                          value="keywords"
-                          defaultChecked
-                          className="mt-1 h-4 w-4 accent-[#ff1744]"
-                        />
-
-                        <div>
-
-                          <p className="font-medium">
-                            Specific keywords
-                          </p>
-
-                          <p className="mt-1 text-xs text-gray-500">
-                            Send the DM when a
-                            comment contains
-                            any of your
-                            keywords.
-                          </p>
-
-                        </div>
-
-                      </label>
-
-                      <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 transition hover:bg-white/[0.04]">
-
-                        <input
-                          type="radio"
-                          name="trigger_type"
-                          value="any_comment"
-                          className="mt-1 h-4 w-4 accent-[#ff1744]"
-                        />
-
-                        <div>
-
-                          <p className="font-medium">
-                            Any comment
-                          </p>
-
-                          <p className="mt-1 text-xs text-gray-500">
-                            Send the DM for
-                            every comment on
-                            this post.
-                          </p>
-
-                        </div>
-
-                      </label>
-
-                    </div>
-
-                    <div className="keywords-field mt-6">
-
-                      <label
-                        htmlFor="trigger_keywords"
-                        className="mb-2 block text-sm font-medium"
-                      >
-                        Keywords
-                      </label>
-
-                      <textarea
-                        id="trigger_keywords"
-                        name="trigger_keywords"
-                        rows={4}
-                        maxLength={1000}
-                        placeholder="link, price, details"
-                        className="w-full resize-y rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm leading-6 outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
-                      />
-
-                      <p className="mt-2 text-xs text-gray-600">
-                        Separate keywords
-                        with commas or put
-                        each keyword on a
-                        new line.
-                      </p>
-
-                    </div>
+                    <TriggerTypeSelector
+                      initialTriggerType="keywords"
+                      initialKeywords={[]}
+                    />
 
                   </div>
 

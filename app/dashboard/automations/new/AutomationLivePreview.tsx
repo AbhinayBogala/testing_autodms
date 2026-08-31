@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type InstagramPost = {
   id: string;
@@ -16,10 +12,7 @@ type InstagramPost = {
   published_at: string | null;
 };
 
-type PreviewTab =
-  | "post"
-  | "comments"
-  | "dm";
+type PreviewTab = "post" | "comments" | "dm";
 
 type AutomationLivePreviewProps = {
   username: string | null;
@@ -27,25 +20,58 @@ type AutomationLivePreviewProps = {
   posts: InstagramPost[];
 };
 
+/**
+ * Get one value from a form field.
+ */
 function getFormValue(
   form: HTMLFormElement,
-  name: string,
+  name: string
 ): string {
-  const field = Array.from(
-    form.elements,
-  ).find(
-    (element) =>
-      element.getAttribute("name") ===
-      name,
+  const fields = Array.from(form.elements).filter(
+    (element) => element.getAttribute("name") === name
   );
 
+  /*
+   * Radio buttons:
+   * The first radio is not necessarily the selected one.
+   * Always read the CHECKED radio value.
+   */
+  const radio = fields.find(
+    (field) =>
+      field instanceof HTMLInputElement &&
+      field.type === "radio" &&
+      field.checked
+  );
+
+  if (radio instanceof HTMLInputElement) {
+    return radio.value;
+  }
+
+  /*
+   * Checkboxes:
+   * Return their value only when checked.
+   */
+  const checkbox = fields.find(
+    (field) =>
+      field instanceof HTMLInputElement &&
+      field.type === "checkbox"
+  );
+
+  if (checkbox instanceof HTMLInputElement) {
+    return checkbox.checked
+      ? checkbox.value || "on"
+      : "";
+  }
+
+  /*
+   * Normal input / textarea / select.
+   */
+  const field = fields[0];
+
   if (
-    field instanceof
-      HTMLInputElement ||
-    field instanceof
-      HTMLTextAreaElement ||
-    field instanceof
-      HTMLSelectElement
+    field instanceof HTMLInputElement ||
+    field instanceof HTMLTextAreaElement ||
+    field instanceof HTMLSelectElement
   ) {
     return field.value;
   }
@@ -53,60 +79,73 @@ function getFormValue(
   return "";
 }
 
+/**
+ * Get ALL values from fields with the same name.
+ *
+ * This is important for:
+ *
+ * reply_texts
+ *
+ * because an automation can have:
+ *
+ * Reply 1
+ * Reply 2
+ * Reply 3
+ * Reply 4
+ */
 function getFormValues(
   form: HTMLFormElement,
-  name: string,
+  name: string
 ): string[] {
-  return Array.from(
-    form.elements,
-  )
+  return Array.from(form.elements)
     .filter(
       (element) =>
-        element.getAttribute(
-          "name",
-        ) === name,
+        element.getAttribute("name") === name
     )
     .map((element) => {
       if (
-        element instanceof
-          HTMLInputElement ||
-        element instanceof
-          HTMLTextAreaElement ||
-        element instanceof
-          HTMLSelectElement
+        element instanceof HTMLInputElement ||
+        element instanceof HTMLTextAreaElement ||
+        element instanceof HTMLSelectElement
       ) {
-        return element.value.trim();
+        return element.value;
       }
 
       return "";
     })
+    .map((value) => value.trim())
     .filter(Boolean);
 }
 
+/**
+ * Read checkbox state.
+ */
 function getCheckboxValue(
   form: HTMLFormElement,
-  name: string,
+  name: string
 ): boolean {
-  const field = Array.from(
-    form.elements,
-  ).find(
-    (element) =>
-      element.getAttribute("name") ===
-      name,
+  const fields = Array.from(form.elements).filter(
+    (element) => element.getAttribute("name") === name
   );
 
+  const field = fields[0];
+
   return (
-    field instanceof
-      HTMLInputElement &&
+    field instanceof HTMLInputElement &&
     field.type === "checkbox" &&
     field.checked
   );
 }
 
+/**
+ * Format Instagram post date.
+ */
 function formatDate(
-  value: string | null,
-) {
-  if (!value) return "";
+  value: string | null
+): string {
+  if (!value) {
+    return "";
+  }
 
   const date = new Date(value);
 
@@ -114,16 +153,16 @@ function formatDate(
     return "";
   }
 
-  return date.toLocaleDateString(
-    undefined,
-    {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    },
-  );
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
+/**
+ * Instagram-style avatar.
+ */
 function Avatar({
   profilePictureUrl,
 }: {
@@ -146,6 +185,9 @@ function Avatar({
   );
 }
 
+/**
+ * Post media.
+ */
 function MediaPreview({
   post,
 }: {
@@ -193,304 +235,305 @@ export default function AutomationLivePreview({
   const [tab, setTab] =
     useState<PreviewTab>("post");
 
+  /**
+   * DM
+   */
   const [message, setMessage] =
     useState("");
 
+  /**
+   * Follow-up
+   */
   const [followupMessage, setFollowupMessage] =
     useState("");
 
   const [followupEnabled, setFollowupEnabled] =
     useState(false);
 
+  /**
+   * Trigger
+   */
   const [triggerType, setTriggerType] =
     useState("keywords");
 
   const [triggerKeywords, setTriggerKeywords] =
     useState("");
 
+  /**
+   * Selected Instagram post
+   */
   const [selectedPostId, setSelectedPostId] =
     useState("");
 
+  /**
+   * Public comment reply
+   */
   const [replyEnabled, setReplyEnabled] =
     useState(false);
 
   const [replyTexts, setReplyTexts] =
     useState<string[]>([]);
 
+  /**
+   * DM button
+   */
   const [buttonName, setButtonName] =
     useState("");
 
   const [buttonUrl, setButtonUrl] =
     useState("");
 
-  const [secondMessageEnabled, setSecondMessageEnabled] =
-    useState(false);
-
-  const [secondMessage, setSecondMessage] =
-    useState("");
-
-  const [secondButtonName, setSecondButtonName] =
-    useState("");
-
-  /*
+  /**
    * ==========================================================
-   * FORM SYNCHRONIZATION
+   * SYNC WITH AUTOMATION FORM
    * ==========================================================
    */
-
   useEffect(() => {
-    const findForm = () =>
+    const form =
       document.getElementById(
-        "new-automation-form",
+        "new-automation-form"
       );
 
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+
     const syncForm = () => {
-      const form = findForm();
-
-      if (!(form instanceof HTMLFormElement)) {
-        return;
-      }
-
+      /**
+       * ------------------------------------------
+       * DM MESSAGE
+       * ------------------------------------------
+       */
       setMessage(
         getFormValue(
           form,
-          "dm_message",
-        ),
+          "dm_message"
+        )
       );
 
+      /**
+       * ------------------------------------------
+       * FOLLOW-UP
+       * ------------------------------------------
+       */
       setFollowupMessage(
         getFormValue(
           form,
-          "followup_message",
-        ) ||
-          getFormValue(
-            form,
-            "second_message",
-          ),
+          "followup_message"
+        )
       );
 
       setFollowupEnabled(
         getCheckboxValue(
           form,
-          "followup_enabled",
-        ) ||
-          getCheckboxValue(
-            form,
-            "second_message_enabled",
-          ),
+          "followup_enabled"
+        )
       );
 
+      /**
+       * ------------------------------------------
+       * TRIGGER
+       * ------------------------------------------
+       */
       setTriggerType(
         getFormValue(
           form,
-          "trigger_type",
-        ) || "keywords",
+          "trigger_type"
+        ) || "keywords"
       );
 
       setTriggerKeywords(
         getFormValue(
           form,
-          "trigger_keywords",
-        ),
+          "trigger_keywords"
+        )
       );
 
+      /**
+       * ------------------------------------------
+       * COMMENT REPLY
+       * ------------------------------------------
+       */
       setReplyEnabled(
         getCheckboxValue(
           form,
-          "reply_enabled",
-        ),
+          "reply_enabled"
+        )
       );
 
+      /**
+       * IMPORTANT:
+       *
+       * This reads ALL reply_texts fields.
+       *
+       * Example:
+       *
+       * reply_texts = [
+       *   "Thanks for commenting!",
+       *   "Here's the link ❤️",
+       *   "Check your DM!"
+       * ]
+       */
       setReplyTexts(
         getFormValues(
           form,
-          "reply_texts",
-        ),
+          "reply_texts"
+        )
       );
 
+      /**
+       * ------------------------------------------
+       * BUTTON
+       * ------------------------------------------
+       */
       setButtonName(
         getFormValue(
           form,
-          "button_name",
-        ),
+          "button_name"
+        )
       );
 
       setButtonUrl(
         getFormValue(
           form,
-          "button_url",
-        ),
+          "button_url"
+        )
       );
 
-      setSecondMessageEnabled(
-        getCheckboxValue(
-          form,
-          "second_message_enabled",
-        ),
-      );
-
-      setSecondMessage(
-        getFormValue(
-          form,
-          "second_message",
-        ),
-      );
-
-      setSecondButtonName(
-        getFormValue(
-          form,
-          "second_button_name",
-        ),
-      );
-
-      const postField =
-        Array.from(
-          form.elements,
-        ).find(
+      /**
+       * ------------------------------------------
+       * SELECTED POST
+       * ------------------------------------------
+       */
+      const postFields =
+        Array.from(form.elements).filter(
           (element) =>
             element.getAttribute(
-              "name",
-            ) ===
-            "instagram_post_id",
+              "name"
+            ) === "instagram_post_id"
         );
+
+      const postField =
+        postFields[0];
 
       if (
         postField instanceof
-          HTMLInputElement ||
-        postField instanceof
-          HTMLSelectElement
+        HTMLInputElement
       ) {
         setSelectedPostId(
-          postField.value,
+          postField.value
+        );
+      }
+
+      /**
+       * Sometimes the selected post is stored
+       * in a hidden input/select.
+       */
+      if (
+        postField instanceof
+        HTMLSelectElement
+      ) {
+        setSelectedPostId(
+          postField.value
         );
       }
     };
 
-    /*
-     * Initial sync.
+    /**
+     * Custom event used by PostSelector.
      */
-
-    syncForm();
-
-    /*
-     * Form may be mounted immediately after
-     * the preview effect, so also retry once.
-     */
-
-    const retryTimer =
-      window.setTimeout(
-        syncForm,
-        50,
-      );
-
-    const retryTimer2 =
-      window.setTimeout(
-        syncForm,
-        250,
-      );
-
-    /*
-     * Listen globally so custom components
-     * can notify the preview.
-     */
-
-    const handleInput = () =>
-      syncForm();
-
-    const handleChange = () =>
-      syncForm();
-
     const handlePostSelected = (
-      event: Event,
+      event: Event
     ) => {
       const customEvent =
         event as CustomEvent<{
           postId?: string;
         }>;
 
-      if (
-        customEvent.detail?.postId
-      ) {
+      const postId =
+        customEvent.detail?.postId;
+
+      if (postId) {
         setSelectedPostId(
-          customEvent.detail.postId,
+          postId
         );
       }
-
-      syncForm();
     };
 
-    document.addEventListener(
+    /**
+     * Initial state.
+     */
+    syncForm();
+
+    /**
+     * Live updates while typing/changing fields.
+     */
+    form.addEventListener(
       "input",
-      handleInput,
+      syncForm
     );
 
-    document.addEventListener(
+    form.addEventListener(
       "change",
-      handleChange,
+      syncForm
     );
 
+    /**
+     * Listen for PostSelector.
+     */
     window.addEventListener(
       "devilx:post-selected",
-      handlePostSelected,
+      handlePostSelected
     );
 
     return () => {
-      window.clearTimeout(
-        retryTimer,
-      );
-
-      window.clearTimeout(
-        retryTimer2,
-      );
-
-      document.removeEventListener(
+      form.removeEventListener(
         "input",
-        handleInput,
+        syncForm
       );
 
-      document.removeEventListener(
+      form.removeEventListener(
         "change",
-        handleChange,
+        syncForm
       );
 
       window.removeEventListener(
         "devilx:post-selected",
-        handlePostSelected,
+        handlePostSelected
       );
     };
   }, []);
 
-  /*
+  /**
    * ==========================================================
    * SELECTED POST
    * ==========================================================
    */
-
   const selectedPost =
     useMemo(
       () =>
         posts.find(
           (post) =>
             post.id ===
-            selectedPostId,
+            selectedPostId
         ) ?? null,
       [
         posts,
         selectedPostId,
-      ],
+      ]
     );
 
-  /*
+  /**
    * ==========================================================
-   * TRIGGER
+   * TRIGGER PREVIEW
    * ==========================================================
    */
-
   const firstKeyword =
     triggerKeywords
       .split(/[\n,]+/)
-      .map((value) =>
-        value.trim(),
+      .map(
+        (value) =>
+          value.trim()
       )
       .filter(Boolean)[0];
 
@@ -499,15 +542,14 @@ export default function AutomationLivePreview({
       "any_comment" ||
     triggerType === "any" ||
     !firstKeyword
-      ? "any word"
+      ? "Any comment"
       : firstKeyword;
 
-  /*
+  /**
    * ==========================================================
-   * DISPLAY VALUES
+   * MESSAGE PREVIEW
    * ==========================================================
    */
-
   const displayMessage =
     message.trim() ||
     "Your DM message will appear here…";
@@ -515,6 +557,11 @@ export default function AutomationLivePreview({
   const displayFollowup =
     followupMessage.trim();
 
+  /**
+   * ==========================================================
+   * COMMENT REPLIES
+   * ==========================================================
+   */
   const visibleReplies =
     replyTexts.length > 0
       ? replyTexts
@@ -522,6 +569,11 @@ export default function AutomationLivePreview({
           "Your public reply will appear here…",
         ];
 
+  /**
+   * ==========================================================
+   * BUTTON
+   * ==========================================================
+   */
   const displayButtonName =
     buttonName.trim() ||
     "Your Button";
@@ -530,24 +582,19 @@ export default function AutomationLivePreview({
     buttonName.trim().length > 0 &&
     buttonUrl.trim().length > 0;
 
-  /*
-   * ==========================================================
-   * RENDER
-   * ==========================================================
-   */
-
   return (
     <aside className="lg:sticky lg:top-6 lg:self-start">
       <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-[#0a0a0a] shadow-2xl shadow-black/30">
 
-        {/* HEADER */}
+        {/* =====================================================
+            HEADER
+        ====================================================== */}
 
         <div className="border-b border-white/[0.07] p-5">
 
           <div className="flex items-start justify-between gap-3">
 
             <div>
-
               <div className="flex items-center gap-2">
 
                 <span className="h-2 w-2 rounded-full bg-green-400" />
@@ -559,9 +606,8 @@ export default function AutomationLivePreview({
               </div>
 
               <p className="mt-1 text-xs leading-5 text-white/40">
-                Updates automatically as you edit.
+                See exactly what people will experience.
               </p>
-
             </div>
 
             <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2.5 py-1 text-[10px] font-medium text-green-300">
@@ -570,7 +616,9 @@ export default function AutomationLivePreview({
 
           </div>
 
-          {/* TABS */}
+          {/* =================================================
+              PREVIEW TABS
+          ================================================== */}
 
           <div className="mt-4 grid grid-cols-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-1">
 
@@ -605,23 +653,28 @@ export default function AutomationLivePreview({
                 >
                   {label}
                 </button>
-              ),
+              )
             )}
 
           </div>
-
         </div>
 
-        {/* PHONE */}
+        {/* =====================================================
+            PHONE PREVIEW
+        ====================================================== */}
 
         <div className="p-4 sm:p-5">
 
           <div className="mx-auto max-w-[390px] overflow-hidden rounded-[2rem] border-[6px] border-[#1b1b1b] bg-[#0d0e11] shadow-xl">
 
-            {/* POST */}
+            {/* =================================================
+                POST PREVIEW
+            ================================================== */}
 
             {tab === "post" && (
               <div className="bg-[#0d0e11]">
+
+                {/* Instagram top bar */}
 
                 <div className="border-b border-white/[0.07] bg-[#111216] px-4 py-3 text-center">
 
@@ -639,6 +692,8 @@ export default function AutomationLivePreview({
 
                 {selectedPost ? (
                   <>
+                    {/* Account header */}
+
                     <div className="flex items-center gap-2 border-b border-white/[0.06] bg-[#111216] px-3 py-2">
 
                       {profilePictureUrl ? (
@@ -668,23 +723,37 @@ export default function AutomationLivePreview({
 
                     </div>
 
+                    {/* Real selected post */}
+
                     <MediaPreview
                       post={
                         selectedPost
                       }
                     />
 
+                    {/* Post actions */}
+
                     <div className="space-y-2 bg-[#111216] px-3 py-3">
 
                       <div className="flex items-center justify-between text-white/80">
 
                         <div className="flex items-center gap-3 text-lg">
-                          <span>♡</span>
-                          <span>◯</span>
-                          <span>➤</span>
+                          <span>
+                            ♡
+                          </span>
+
+                          <span>
+                            ◯
+                          </span>
+
+                          <span>
+                            ➤
+                          </span>
                         </div>
 
-                        <span>♧</span>
+                        <span>
+                          ♧
+                        </span>
 
                       </div>
 
@@ -709,7 +778,7 @@ export default function AutomationLivePreview({
 
                       <p className="text-[9px] text-white/30">
                         {formatDate(
-                          selectedPost.published_at,
+                          selectedPost.published_at
                         )}
                       </p>
 
@@ -740,7 +809,9 @@ export default function AutomationLivePreview({
               </div>
             )}
 
-            {/* COMMENTS */}
+            {/* =================================================
+                COMMENTS PREVIEW
+            ================================================== */}
 
             {tab ===
               "comments" && (
@@ -756,6 +827,8 @@ export default function AutomationLivePreview({
 
                 {selectedPost ? (
                   <>
+                    {/* Selected post */}
+
                     <MediaPreview
                       post={
                         selectedPost
@@ -763,6 +836,10 @@ export default function AutomationLivePreview({
                     />
 
                     <div className="space-y-4 bg-[#111216] p-4">
+
+                      {/* =====================================
+                          USER COMMENT
+                      ====================================== */}
 
                       <div className="flex gap-2">
 
@@ -787,14 +864,28 @@ export default function AutomationLivePreview({
                           </div>
 
                           <div className="mt-1 flex gap-3 text-[9px] text-white/30">
-                            <span>now</span>
-                            <span>Reply</span>
-                            <span>♥</span>
+
+                            <span>
+                              now
+                            </span>
+
+                            <span>
+                              Reply
+                            </span>
+
+                            <span>
+                              ♥
+                            </span>
+
                           </div>
 
                         </div>
 
                       </div>
+
+                      {/* =====================================
+                          PUBLIC COMMENT REPLIES
+                      ====================================== */}
 
                       {replyEnabled && (
                         <div className="ml-9 space-y-3">
@@ -802,12 +893,10 @@ export default function AutomationLivePreview({
                           {visibleReplies.map(
                             (
                               reply,
-                              index,
+                              index
                             ) => (
                               <div
-                                key={
-                                  `preview-reply-${index}`
-                                }
+                                key={`preview-reply-${index}`}
                                 className="flex gap-2"
                               >
 
@@ -820,16 +909,20 @@ export default function AutomationLivePreview({
                                 <div className="min-w-0 flex-1">
 
                                   <p className="text-[10px] font-semibold text-white">
-                                    {username ||
-                                      "your_instagram"}
+                                    {
+                                      username ||
+                                      "your_instagram"
+                                    }
                                   </p>
 
                                   <div className="mt-1 rounded-2xl bg-[#26272b] px-3 py-2.5">
 
                                     <p className="whitespace-pre-wrap break-words text-[12px] leading-5 text-white">
+
                                       {
                                         reply
                                       }
+
                                     </p>
 
                                   </div>
@@ -841,11 +934,15 @@ export default function AutomationLivePreview({
                                 </div>
 
                               </div>
-                            ),
+                            )
                           )}
 
                         </div>
                       )}
+
+                      {/* =====================================
+                          REPLY OFF MESSAGE
+                      ====================================== */}
 
                       {!replyEnabled && (
                         <div className="rounded-2xl border border-dashed border-white/[0.08] bg-black/10 p-3">
@@ -857,6 +954,10 @@ export default function AutomationLivePreview({
                         </div>
                       )}
 
+                      {/* =====================================
+                          TRIGGER
+                      ====================================== */}
+
                       <div className="rounded-2xl border border-white/[0.06] bg-black/20 p-3">
 
                         <p className="text-[9px] uppercase tracking-wider text-white/30">
@@ -864,13 +965,16 @@ export default function AutomationLivePreview({
                         </p>
 
                         <p className="mt-1 text-[11px] text-white/70">
+
                           {triggerType ===
-                            "any_comment"
-                            ? "Any word / any comment"
+                            "any_comment" ||
+                          triggerType === "any"
+                            ? "Any comment"
                             : `Keyword: ${
                                 firstKeyword ||
                                 "your keyword"
                               }`}
+
                         </p>
 
                       </div>
@@ -890,10 +994,16 @@ export default function AutomationLivePreview({
               </div>
             )}
 
-            {/* DM */}
+            {/* =================================================
+                DM PREVIEW
+            ================================================== */}
 
             {tab === "dm" && (
               <div className="bg-[#0e0f12]">
+
+                {/* =============================================
+                    DM HEADER
+                ============================================== */}
 
                 <div className="border-b border-white/[0.07] bg-[#111216] px-4 py-3">
 
@@ -924,21 +1034,46 @@ export default function AutomationLivePreview({
                           "your_instagram"}
                       </p>
 
-                      <p className="text-[9px] text-white/30">
+                      <p className="text-[10px] text-white/40">
                         Active now
                       </p>
 
+                    </div>
+
+                    <div
+                      className="flex items-center gap-3 text-white/50"
+                      aria-hidden="true"
+                    >
+                      <span>
+                        ☎
+                      </span>
+
+                      <span>
+                        ▣
+                      </span>
+
+                      <span>
+                        ⓘ
+                      </span>
                     </div>
 
                   </div>
 
                 </div>
 
+                {/* =============================================
+                    DM MESSAGES
+                ============================================== */}
+
                 <div className="min-h-[430px] space-y-4 px-4 py-6">
 
                   <p className="mb-7 text-center text-[10px] text-white/30">
                     Today
                   </p>
+
+                  {/* ===========================================
+                      INITIAL DM
+                  ============================================ */}
 
                   <div className="flex items-end gap-2">
 
@@ -955,6 +1090,10 @@ export default function AutomationLivePreview({
                           displayMessage
                         }
                       </span>
+
+                      {/* =====================================
+                          BUTTON INSIDE DM
+                      ====================================== */}
 
                       {hasButton && (
                         <div className="mt-3 overflow-hidden rounded-xl border border-white/[0.08] bg-[#1b1c20]">
@@ -975,6 +1114,10 @@ export default function AutomationLivePreview({
 
                   </div>
 
+                  {/* ===========================================
+                      FOLLOW-UP DM
+                  ============================================ */}
+
                   {followupEnabled &&
                     displayFollowup && (
                       <div className="flex items-end gap-2">
@@ -993,28 +1136,16 @@ export default function AutomationLivePreview({
                             }
                           </span>
 
-                          {secondMessageEnabled &&
-                            secondButtonName && (
-                              <div className="mt-3 overflow-hidden rounded-xl border border-white/[0.08] bg-[#1b1c20]">
-
-                                <button
-                                  type="button"
-                                  className="w-full border-t border-white/[0.08] px-4 py-2.5 text-center text-[12px] font-semibold text-[#4ade80]"
-                                >
-                                  {
-                                    secondButtonName
-                                  }
-                                </button>
-
-                              </div>
-                            )}
-
                         </div>
 
                       </div>
                     )}
 
                 </div>
+
+                {/* =============================================
+                    DM COMPOSER
+                ============================================== */}
 
                 <div className="border-t border-white/[0.07] bg-[#111216] p-3">
 
@@ -1044,6 +1175,10 @@ export default function AutomationLivePreview({
             )}
 
           </div>
+
+          {/* =====================================================
+              PREVIEW DESCRIPTION
+          ====================================================== */}
 
           <p className="mx-auto mt-4 max-w-[390px] text-center text-[11px] leading-5 text-white/35">
 
