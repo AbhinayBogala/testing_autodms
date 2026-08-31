@@ -629,19 +629,254 @@ export async function POST() {
     }
 
     // =========================================================
-    // 6. BULK UPSERT POSTS
+    // 7. RECONCILE DATABASE WITH INSTAGRAM
     // =========================================================
     //
-    // IMPORTANT:
+    // At this point:
     //
-    // Existing posts are UPDATED.
-    // New posts are INSERTED.
+    // 1. Instagram account/profile fetch succeeded.
+    // 2. Instagram media pagination completed successfully.
+    // 3. `posts` contains the complete media set returned by
+    //    Instagram for this account.
     //
-    // Existing instagram_posts.id values are preserved.
+    // Therefore it is now safe to reconcile the local content.
     //
-    // NOTHING IS DELETED HERE.
+    // - Existing Instagram media -> UPDATE through upsert
+    // - New Instagram media      -> INSERT through upsert
+    // - Missing Instagram media  -> REMOVE from My Content
     //
+    // We only perform deletion AFTER the complete Instagram
+    // pagination has succeeded. This prevents an API failure or
+    // partial response from accidentally deleting local content.
     // =========================================================
+
+    const instagramMediaIds = new Set(
+      posts.map(
+        (post) => post.instagram_media_id
+      )
+    );
+
+    // ---------------------------------------------------------
+    // LOAD CURRENT LOCAL POSTS
+    // ---------------------------------------------------------
+
+    const {
+      data: existingPosts,
+      error: existingPostsError,
+    } = await admin
+      .from("instagram_posts")
+      .select(
+        "id, instagram_media_id"
+      )
+      .eq(
+        "instagram_account_id",
+        account.id
+      );
+
+    if (existingPostsError) {
+      console.error(
+        "FAILED TO LOAD EXISTING INSTAGRAM POSTS:",
+        existingPostsError
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+
+          error:
+            "Failed to reconcile Instagram content",
+
+          details:
+            existingPostsError.message,
+
+          totalPostsFetched:
+            posts.length,
+
+          pagesFetched,
+
+          refreshedToken,
+
+          refreshError,
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    // ---------------------------------------------------------
+    // FIND POSTS THAT NO LONGER EXIST ON INSTAGRAM
+    // ---------------------------------------------------------
+
+    const deletedLocalPosts =
+      (existingPosts ?? []).filter(
+        (localPost) =>
+          !instagramMediaIds.has(
+            String(
+              localPost.instagram_media_id
+            )
+          )
+      );
+
+    const deletedPostIds =
+      deletedLocalPosts.map(
+        (post) => post.id
+      );
+
+    const deletedInstagramMediaIds =
+      deletedLocalPosts.map(
+        (post) =>
+          String(
+            post.instagram_media_id
+          )
+      );
+
+    let deletedPosts = 0;
+    let deactivatedAutomations = 0;
+
+    // ---------------------------------------------------------
+    // DEACTIVATE AUTOMATIONS CONNECTED TO DELETED POSTS
+    // ---------------------------------------------------------
+    //
+    // The post is gone from Instagram, so an automation tied
+    // specifically to that post should no longer be active.
+    //
+    // We do this BEFORE deleting the local post row.
+    // ---------------------------------------------------------
+
+    if (deletedInstagramMediaIds.length > 0) {
+      const {
+        data: automationsToDeactivate,
+        error: automationLookupError,
+      } = await admin
+        .from("instagram_automations")
+        .select(
+          "id, instagram_post_id"
+        )
+        .eq(
+          "instagram_account_id",
+          account.id
+        )
+        .in(
+          "instagram_post_id",
+          deletedInstagramMediaIds
+        )
+        .eq(
+          "is_active",
+          true
+        );
+
+      if (automationLookupError) {
+        console.warn(
+          "FAILED TO FIND AUTOMATIONS FOR DELETED POSTS:",
+          automationLookupError
+        );
+      } else if (
+        automationsToDeactivate &&
+        automationsToDeactivate.length > 0
+      ) {
+        const automationIds =
+          automationsToDeactivate.map(
+            (automation) =>
+              automation.id
+          );
+
+        const {
+          error: deactivateError,
+        } = await admin
+          .from("instagram_automations")
+          .update({
+            is_active: false,
+            updated_at:
+              new Date().toISOString(),
+          })
+          .in(
+            "id",
+            automationIds
+          );
+
+        if (deactivateError) {
+          console.warn(
+            "FAILED TO DEACTIVATE AUTOMATIONS FOR DELETED POSTS:",
+            deactivateError
+          );
+        } else {
+          deactivatedAutomations =
+            automationIds.length;
+        }
+      }
+    }
+
+    // ---------------------------------------------------------
+    // DELETE STALE LOCAL POSTS
+    // ---------------------------------------------------------
+    //
+    // This is the operation that makes a deleted Instagram post
+    // disappear from Dashboard -> Content.
+    //
+    // Only posts belonging to THIS Instagram account are touched.
+    // ---------------------------------------------------------
+
+    if (deletedPostIds.length > 0) {
+      const {
+        error: deletePostsError,
+      } = await admin
+        .from("instagram_posts")
+        .delete()
+        .eq(
+          "instagram_account_id",
+          account.id
+        )
+        .in(
+          "id",
+          deletedPostIds
+        );
+
+      if (deletePostsError) {
+        console.error(
+          "FAILED TO DELETE STALE INSTAGRAM POSTS:",
+          deletePostsError
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+
+            error:
+              "Instagram sync completed, but stale content could not be removed",
+
+            details:
+              deletePostsError.message,
+
+            totalPostsFetched:
+              posts.length,
+
+            pagesFetched,
+
+            deletedPosts: 0,
+
+            stalePostsFound:
+              deletedPostIds.length,
+
+            deactivatedAutomations,
+
+            refreshedToken,
+
+            refreshError,
+          },
+          {
+            status: 500,
+          }
+        );
+      }
+
+      deletedPosts =
+        deletedPostIds.length;
+    }
+
+    // ---------------------------------------------------------
+    // 8. UPSERT CURRENT INSTAGRAM POSTS
+    // ---------------------------------------------------------
 
     let synced = 0;
 
@@ -681,12 +916,16 @@ export async function POST() {
 
             pagesFetched,
 
+            deletedPosts,
+
+            deactivatedAutomations,
+
             refreshedToken,
 
             refreshError,
           },
           {
-            status: 500,
+            status: 500
           }
         );
       }
@@ -697,24 +936,7 @@ export async function POST() {
     }
 
     // =========================================================
-    // 7. IMPORTANT:
-    // DO NOT DELETE OLD POSTS
-    // =========================================================
-    //
-    // We intentionally do NOT compare the fetched posts
-    // against all database posts.
-    //
-    // Why?
-    //
-    // A post missing from the current API response does NOT
-    // necessarily mean Instagram deleted it.
-    //
-    // Also, deleting/recreating posts can break automation
-    // references.
-    //
-    // A separate cleanup/reconciliation process can handle
-    // confirmed deleted posts later.
-    //
+    // SUCCESS
     // =========================================================
 
     const syncDurationMs =
@@ -810,8 +1032,13 @@ export async function POST() {
 
       pagesFetched,
 
-      // Important behavior
-      deletedPosts: 0,
+      // Reconciliation
+      deletedPosts,
+
+      stalePostsFound:
+        deletedPostIds.length,
+
+      deactivatedAutomations,
 
       commentsSynced: 0,
 
