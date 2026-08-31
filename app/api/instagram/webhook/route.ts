@@ -1376,7 +1376,7 @@ async function processComment(
         instagramUserId: webhookInstagramUserId,
         accessToken: account.access_token,
         recipient: {
-          comment_id: commentId,
+          id: String(commenterId).trim(),
         },
         automationId: selectedAutomation.id,
         flowMessage: flowToSend,
@@ -1671,175 +1671,192 @@ async function sendAutomationFlowMessage({
 }: {
   instagramUserId: string;
   accessToken: string;
-  recipient:
-    | { comment_id: string }
-    | { id: string };
+  recipient: { id: string };
   automationId: string;
   flowMessage: FlowMessage;
 }) {
   try {
-    const url = graphUrl(
-      `${instagramUserId}/messages`
+    const url = graphUrl(`${instagramUserId}/messages`);
+
+    const flowButtons = flowMessage.buttons.filter(
+      (button) =>
+        button.action === "flow" &&
+        button.label.trim() &&
+        Boolean(button.targetMessageId?.trim())
     );
 
-    const linkButtons = flowMessage.buttons
-      .filter(
-        (button) =>
-          button.action === "link" &&
-          button.url?.trim() &&
-          button.label.trim()
-      );
+    const linkButtons = flowMessage.buttons.filter(
+      (button) =>
+        button.action === "link" &&
+        button.url?.trim() &&
+        button.label.trim()
+    );
 
-    const flowButtons = flowMessage.buttons
-      .filter(
-        (button) =>
-          button.action === "flow" &&
-          button.label.trim() &&
-          button.targetMessageId
-      );
-
-    const messagesToSend: any[] = [];
-
-    /*
-     * Instagram supports URL buttons and quick replies as
-     * different message templates. Keep both actions working.
-     */
-    for (
-      let offset = 0;
-      offset < linkButtons.length;
-      offset += 3
-    ) {
-      const batch = linkButtons.slice(
-        offset,
-        offset + 3
-      );
-
-      messagesToSend.push({
-        recipient,
-        message: {
-          attachment: {
-            type: "template",
-            payload: {
-              template_type: "button",
-              text: flowMessage.message,
-              buttons: batch.map(
-                (button) => ({
-                  type: "web_url",
-                  url: button.url!.trim(),
-                  title: button.label.trim(),
-                })
-              ),
-            },
-          },
-        },
-      });
-    }
-
-    for (
-      let offset = 0;
-      offset < flowButtons.length;
-      offset += 13
-    ) {
-      const batch = flowButtons.slice(
-        offset,
-        offset + 13
-      );
-
-      messagesToSend.push({
-        recipient,
-        message: {
-          text:
-            linkButtons.length > 0
-              ? "What would you like to do next?"
-              : flowMessage.message,
-          quick_replies: batch.map(
-            (button) => ({
-              content_type: "text",
-              title: button.label.trim(),
-              payload: flowPayload(
-                automationId,
-                button.targetMessageId!
-              ),
-            })
-          ),
-        },
-      });
-    }
-
-    if (messagesToSend.length === 0) {
-      messagesToSend.push({
-        recipient,
+    // DevilX Flow buttons use Instagram Quick Replies.
+    // They must be sent to the user's Instagram-scoped ID.
+    if (flowButtons.length > 0) {
+      const payload = {
+        recipient: { id: String(recipient.id).trim() },
+        messaging_type: "RESPONSE",
         message: {
           text: flowMessage.message,
+          quick_replies: flowButtons.slice(0, 13).map((button) => ({
+            content_type: "text",
+            title: button.label.trim().slice(0, 20),
+            payload: flowPayload(
+              automationId,
+              button.targetMessageId!
+            ),
+          })),
         },
+      };
+
+      console.log(
+        "SENDING INSTAGRAM FLOW QUICK REPLIES:",
+        JSON.stringify(payload, null, 2)
+      );
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        cache: "no-store",
       });
+
+      const data = await readJson(response);
+
+      console.log("INSTAGRAM DM FLOW API RESPONSE:", {
+        status: response.status,
+        ok: response.ok,
+        data,
+        recipientId: recipient.id,
+        quickReplyCount: flowButtons.length,
+        quickReplies: payload.message.quick_replies,
+      });
+
+      if (!response.ok) {
+        if (isInstagramTokenError(data)) {
+          console.error("INSTAGRAM TOKEN ERROR DETECTED");
+        }
+        return { success: false, data };
+      }
+
+      return {
+        success: Boolean(data?.message_id || data?.id),
+        data,
+      };
     }
 
-    let lastData: any = null;
+    // Normal URL buttons are sent as a button template.
+    if (linkButtons.length > 0) {
+      const messagesToSend: any[] = [];
 
-    for (const payload of messagesToSend) {
-      const response = await fetch(
-        url,
-        {
+      for (let offset = 0; offset < linkButtons.length; offset += 3) {
+        const batch = linkButtons.slice(offset, offset + 3);
+
+        messagesToSend.push({
+          recipient,
+          message: {
+            attachment: {
+              type: "template",
+              payload: {
+                template_type: "button",
+                text: flowMessage.message,
+                buttons: batch.map((button) => ({
+                  type: "web_url",
+                  url: button.url!.trim(),
+                  title: button.label.trim().slice(0, 20),
+                })),
+              },
+            },
+          },
+        });
+      }
+
+      let lastData: any = null;
+
+      for (const payload of messagesToSend) {
+        console.log(
+          "SENDING INSTAGRAM LINK BUTTONS:",
+          JSON.stringify(payload, null, 2)
+        );
+
+        const response = await fetch(url, {
           method: "POST",
           headers: {
-            Authorization:
-              `Bearer ${accessToken}`,
-            "Content-Type":
-              "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
           },
           body: JSON.stringify(payload),
           cache: "no-store",
-        }
-      );
+        });
 
-      const data =
-        await readJson(response);
+        const data = await readJson(response);
 
-      console.log(
-        "INSTAGRAM DM FLOW API RESPONSE:",
-        {
+        console.log("INSTAGRAM DM LINK API RESPONSE:", {
           status: response.status,
           ok: response.ok,
           data,
-        }
-      );
+        });
 
-      if (!response.ok) {
-        if (
-          isInstagramTokenError(data)
-        ) {
-          console.error(
-            "INSTAGRAM TOKEN ERROR DETECTED"
-          );
+        if (!response.ok) {
+          if (isInstagramTokenError(data)) {
+            console.error("INSTAGRAM TOKEN ERROR DETECTED");
+          }
+          return { success: false, data };
         }
 
-        return {
-          success: false,
-          data,
-        };
+        lastData = data;
       }
 
-      lastData = data;
+      return {
+        success: Boolean(lastData?.message_id || lastData?.id),
+        data: lastData,
+      };
+    }
+
+    const payload = {
+      recipient,
+      message: {
+        text: flowMessage.message,
+      },
+    };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+    });
+
+    const data = await readJson(response);
+
+    console.log("INSTAGRAM DM API RESPONSE:", {
+      status: response.status,
+      ok: response.ok,
+      data,
+    });
+
+    if (!response.ok) {
+      if (isInstagramTokenError(data)) {
+        console.error("INSTAGRAM TOKEN ERROR DETECTED");
+      }
+      return { success: false, data };
     }
 
     return {
-      success: Boolean(
-        lastData?.message_id ||
-          lastData?.id
-      ),
-      data: lastData,
+      success: Boolean(data?.message_id || data?.id),
+      data,
     };
   } catch (error) {
-    console.error(
-      "PRIVATE FLOW REQUEST ERROR:",
-      error
-    );
-
-    return {
-      success: false,
-      error,
-    };
+    console.error("PRIVATE FLOW REQUEST ERROR:", error);
+    return { success: false, error };
   }
 }
 
@@ -1892,12 +1909,41 @@ async function processMessage(
         ? String(event.message.text)
         : "";
 
-    if (!senderId || !messageId) {
+    /*
+     * A DevilX Flow button is an Instagram quick reply.
+     * Meta sends its payload under message.quick_reply.payload.
+     * Keep postback support only for backwards compatibility with
+     * older messages that may still be in flight.
+     */
+    const incomingFlowPayload =
+      event?.message?.quick_reply?.payload
+        ? String(event.message.quick_reply.payload)
+        : event?.postback?.payload
+          ? String(event.postback.payload)
+          : null;
+
+    if (event?.message?.quick_reply) {
+      console.log("INSTAGRAM QUICK REPLY RECEIVED:", {
+        senderId,
+        text,
+        payload: incomingFlowPayload,
+        messageId,
+        quickReply: event.message.quick_reply,
+      });
+    }
+
+    const incomingFlowClick =
+      getFlowClickTarget(
+        incomingFlowPayload
+      );
+
+    if (!senderId) {
       console.warn(
-        "MESSAGE DATA MISSING",
+        "MESSAGE SENDER ID MISSING",
         {
           senderId,
           messageId,
+          incomingFlowPayload,
         }
       );
 
@@ -1908,26 +1954,32 @@ async function processMessage(
       createAdminClient();
 
     /*
-     * Prevent duplicate Meta webhook deliveries.
+     * Normal inbound messages have a Meta message ID.
+     *
+     * Flow quick-reply clicks normally have message.mid, but some
+     * webhook variants may omit it. Only perform the duplicate-message
+     * check when a real message ID exists.
      */
-    const {
-      data: existingMessage,
-    } = await supabase
-      .from("instagram_messages")
-      .select("id")
-      .eq(
-        "instagram_message_id",
-        messageId
-      )
-      .maybeSingle();
+    if (messageId) {
+      const {
+        data: existingMessage,
+      } = await supabase
+        .from("instagram_messages")
+        .select("id")
+        .eq(
+          "instagram_message_id",
+          messageId
+        )
+        .maybeSingle();
 
-    if (existingMessage) {
-      console.log(
-        "DUPLICATE INSTAGRAM MESSAGE IGNORED:",
-        messageId
-      );
+      if (existingMessage) {
+        console.log(
+          "DUPLICATE INSTAGRAM MESSAGE IGNORED:",
+          messageId
+        );
 
-      return;
+        return;
+      }
     }
 
     /*
@@ -1970,79 +2022,81 @@ async function processMessage(
     }
 
     /*
-     * Save the inbound message first. This also makes the
+     * Save a normal inbound message first. This also makes the
      * conversation UI update through Supabase Realtime.
+     *
+     * Postback Flow clicks do not necessarily have message.mid,
+     * so they are handled by the Flow section below instead of
+     * being inserted as a normal text message.
      */
-    const {
-      error: messageError,
-    } = await supabase
-      .from("instagram_messages")
-      .insert({
-        instagram_message_id:
-          messageId,
-        sender_instagram_id:
-          senderId,
-        recipient_instagram_id:
-          recipientId,
-        message_text:
-          text,
-        direction:
-          "inbound",
-        message_type:
-          "text",
-        is_read:
-          false,
-        raw_payload:
-          event,
-        created_at:
-          new Date().toISOString(),
-        sent_at:
-          new Date().toISOString(),
-      });
+    if (messageId) {
+      const {
+        error: messageError,
+      } = await supabase
+        .from("instagram_messages")
+        .insert({
+          instagram_message_id:
+            messageId,
+          sender_instagram_id:
+            senderId,
+          recipient_instagram_id:
+            recipientId,
+          message_text:
+            text,
+          direction:
+            "inbound",
+          message_type:
+            "text",
+          is_read:
+            false,
+          raw_payload:
+            event,
+          created_at:
+            new Date().toISOString(),
+          sent_at:
+            new Date().toISOString(),
+        });
 
-    if (messageError) {
-      console.error(
-        "SAVE INSTAGRAM MESSAGE ERROR:",
-        messageError
-      );
+      if (messageError) {
+        console.error(
+          "SAVE INSTAGRAM MESSAGE ERROR:",
+          messageError
+        );
 
-      return;
-    }
-
-    console.log(
-      "INSTAGRAM MESSAGE SAVED FOR REALTIME:",
-      {
-        messageId,
-        senderId,
-        text,
+        return;
       }
-    );
+
+      console.log(
+        "INSTAGRAM MESSAGE SAVED FOR REALTIME:",
+        {
+          messageId,
+          senderId,
+          text,
+        }
+      );
+    }
 
     /*
      * =========================================================
      * FLOW BUTTON CLICK
      * =========================================================
      *
-     * A DevilX Flow button is represented by an Instagram
-     * quick-reply payload:
+     * A DevilX Flow button is represented by an Instagram quick
+     * reply payload:
      *
      * devilx_flow:<automationId>:<targetMessageId>
+     *
+     * We also accept the older postback payload format so previously
+     * delivered messages do not break.
      */
-    const quickReplyPayload =
-      event?.message?.quick_reply?.payload
-        ? String(
-            event.message.quick_reply.payload
-          )
-        : event?.postback?.payload
-          ? String(event.postback.payload)
-          : null;
-
     const flowClick =
-      getFlowClickTarget(
-        quickReplyPayload
-      );
+      incomingFlowClick;
 
     if (!flowClick) {
+      /*
+       * This was a normal inbound message. There is no Flow
+       * button to process, so the webhook work is complete.
+       */
       return;
     }
 
@@ -2088,6 +2142,10 @@ async function processMessage(
       .eq(
         "user_id",
         accountRow.user_id
+      )
+      .eq(
+        "is_active",
+        true
       )
       .maybeSingle();
 
