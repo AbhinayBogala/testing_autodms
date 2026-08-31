@@ -1,22 +1,18 @@
+import PostSelector from "./PostSelector";
+import ReplyFieldsEditor from "../[id]/edit/ReplyFieldsEditor";
+import AutomationLivePreview from "./AutomationLivePreview";
+import AutomationStatusToggle from "./AutomationStatusToggle";
+
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
-import PostSelector from "../../new/PostSelector";
-import ReplyFieldsEditor from "./ReplyFieldsEditor";
-import AutomationLivePreview from "../../new/AutomationLivePreview";
-import AutomationStatusToggle from "../../new/AutomationStatusToggle";
 
 export const dynamic = "force-dynamic";
 
-type PageProps = {
-  params: Promise<{
-    id: string;
-  }>;
-  searchParams: Promise<{
-    error?: string;
-  }>;
-};
+/* ============================================================
+   TYPES
+============================================================ */
 
 type InstagramPost = {
   id: string;
@@ -28,48 +24,26 @@ type InstagramPost = {
   published_at: string | null;
 };
 
-type Automation = {
-  id: string;
-  name: string | null;
-
-  user_id: string;
-  instagram_account_id: string;
-  instagram_post_id: string;
-
-  trigger_type: string | null;
-  trigger_keywords: string[] | null;
-  trigger_keyword: string | null;
-
-  dm_message: string;
-
-  reply_enabled: boolean | null;
-  reply_text: string | null;
-  reply_texts: string[] | null;
-
-  button_name: string | null;
-  button_url: string | null;
-
-  followup_enabled: boolean | null;
-  followup_delay_minutes: number | null;
-  followup_message: string | null;
-
-  is_active: boolean;
+type SearchParams = {
+  error?: string;
 };
 
-export default async function EditAutomationPage({
-  params,
+/* ============================================================
+   PAGE
+============================================================ */
+
+export default async function NewAutomationPage({
   searchParams,
-}: PageProps) {
-  const { id } = await params;
-  const query = await searchParams;
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const params = await searchParams;
 
   const supabase = await createClient();
 
-  /*
-   * =========================================================
-   * AUTH
-   * =========================================================
-   */
+  /* ==========================================================
+     AUTHENTICATION
+  ========================================================== */
 
   const {
     data: { user },
@@ -77,6 +51,826 @@ export default async function EditAutomationPage({
   } = await supabase.auth.getUser();
 
   if (authError) {
+    return (
+      <main className="min-h-screen bg-[#050505] p-4 text-white sm:p-6 lg:p-10">
+        <div className="mx-auto max-w-3xl">
+
+          <h1 className="text-2xl font-bold">
+            Authentication Error
+          </h1>
+
+          <pre className="mt-5 rounded-xl bg-red-500/10 p-5 text-sm text-red-300">
+            {authError.message}
+          </pre>
+
+        </div>
+      </main>
+    );
+  }
+
+  if (!user) {
+    redirect("/admin/login");
+  }
+
+  /* ==========================================================
+     CREATE AUTOMATION
+  ========================================================== */
+
+  async function createAutomation(
+    formData: FormData,
+  ) {
+    "use server";
+
+    const supabase =
+      await createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      redirect("/admin/login");
+    }
+
+    /* ========================================================
+       AUTOMATION NAME
+    ======================================================== */
+
+    const automationName =
+      String(
+        formData.get("name") ?? "",
+      ).trim();
+
+    if (!automationName) {
+      redirect(
+        "/dashboard/automations/new?error=Please+enter+an+automation+name.",
+      );
+    }
+
+    if (
+      automationName.length >
+      100
+    ) {
+      redirect(
+        "/dashboard/automations/new?error=Automation+name+must+be+100+characters+or+less.",
+      );
+    }
+
+    /* ========================================================
+       INSTAGRAM POST
+    ======================================================== */
+
+    const instagramPostId =
+      String(
+        formData.get(
+          "instagram_post_id",
+        ) ?? "",
+      ).trim();
+
+    /*
+     * instagram_automations.instagram_post_id
+     * stores instagram_posts.id.
+     *
+     * instagram_posts.instagram_media_id
+     * stores the actual Instagram media ID.
+     */
+
+    /* ========================================================
+       TRIGGER
+    ======================================================== */
+
+    const triggerType =
+      String(
+        formData.get(
+          "trigger_type",
+        ) ?? "keywords",
+      ).trim();
+
+    const rawKeywords =
+      String(
+        formData.get(
+          "trigger_keywords",
+        ) ?? "",
+      );
+
+    /* ========================================================
+       DM
+    ======================================================== */
+
+    const dmMessage =
+      String(
+        formData.get(
+          "dm_message",
+        ) ?? "",
+      ).trim();
+
+    /* ========================================================
+       PUBLIC COMMENT REPLY
+    ======================================================== */
+
+    const rawReplyEnabled =
+      formData.get(
+        "reply_enabled",
+      );
+
+    const replyEnabled =
+      rawReplyEnabled === "true";
+
+    const replyTexts =
+      Array.from(
+        new Set(
+          formData
+            .getAll(
+              "reply_texts",
+            )
+            .map((value) =>
+              String(
+                value,
+              ).trim(),
+            )
+            .filter(Boolean),
+        ),
+      );
+
+    const replyText =
+      replyTexts[0] ?? "";
+
+    /* ========================================================
+       DM BUTTON
+    ======================================================== */
+
+    const buttonName =
+      String(
+        formData.get(
+          "button_name",
+        ) ?? "",
+      ).trim();
+
+    const buttonUrl =
+      String(
+        formData.get(
+          "button_url",
+        ) ?? "",
+      ).trim();
+
+    /* ========================================================
+       LINK FOLLOW-UP
+    ======================================================== */
+
+    const followupEnabled =
+      formData.get(
+        "followup_enabled",
+      ) === "on";
+
+    const followupDelayMinutes =
+      Math.min(
+        1380,
+        Math.max(
+          60,
+          Number(
+            formData.get(
+              "followup_delay_minutes",
+            ) ?? 360,
+          ) || 360,
+        ),
+      );
+
+    const followupMessage =
+      String(
+        formData.get(
+          "followup_message",
+        ) ?? "",
+      ).trim();
+
+    /* ========================================================
+       STATUS
+    ======================================================== */
+
+    const isActive =
+      formData.get(
+        "is_active",
+      ) === "on";
+
+    /* ========================================================
+       KEYWORDS
+    ======================================================== */
+
+    const triggerKeywords =
+      Array.from(
+        new Set(
+          rawKeywords
+            .split(/[\n,]+/)
+            .map((keyword) =>
+              keyword
+                .trim()
+                .toLowerCase(),
+            )
+            .filter(Boolean),
+        ),
+      );
+
+    /* ========================================================
+       VALIDATION
+    ======================================================== */
+
+    if (!instagramPostId) {
+      redirect(
+        "/dashboard/automations/new?error=Please+select+an+Instagram+post.",
+      );
+    }
+
+    if (
+      triggerType !==
+      "keywords" &&
+      triggerType !==
+      "any_comment"
+    ) {
+      redirect(
+        "/dashboard/automations/new?error=Invalid+trigger+type.",
+      );
+    }
+
+    if (
+      triggerType ===
+      "keywords" &&
+      triggerKeywords.length ===
+      0
+    ) {
+      redirect(
+        "/dashboard/automations/new?error=Please+enter+at+least+one+keyword.",
+      );
+    }
+
+    if (!dmMessage) {
+      redirect(
+        "/dashboard/automations/new?error=Please+enter+a+DM+message.",
+      );
+    }
+
+    if (
+      followupEnabled &&
+      (!buttonName ||
+        !buttonUrl)
+    ) {
+      redirect(
+        "/dashboard/automations/new?error=Follow-up+requires+a+Custom+DM+Button+name+and+URL.",
+      );
+    }
+
+    if (
+      followupEnabled &&
+      !followupMessage
+    ) {
+      redirect(
+        "/dashboard/automations/new?error=Please+enter+a+follow-up+message.",
+      );
+    }
+
+    if (
+      replyEnabled &&
+      replyTexts.length === 0
+    ) {
+      redirect(
+        "/dashboard/automations/new?error=Please+enter+at+least+one+public+reply+message.",
+      );
+    }
+
+    /* ========================================================
+       GET CONNECTED INSTAGRAM ACCOUNT
+    ======================================================== */
+
+    const {
+      data: account,
+      error: accountError,
+    } = await supabase
+      .from(
+        "instagram_accounts",
+      )
+      .select(
+        `
+        id,
+        instagram_user_id,
+        username,
+        profile_picture_url
+        `,
+      )
+      .eq(
+        "user_id",
+        user.id,
+      )
+      .eq(
+        "is_connected",
+        true,
+      )
+      .order(
+        "connected_at",
+        {
+          ascending: false,
+        },
+      )
+      .limit(1)
+      .maybeSingle();
+
+    if (accountError) {
+      redirect(
+        `/dashboard/automations/new?error=${encodeURIComponent(
+          accountError.message,
+        )}`,
+      );
+    }
+
+    if (!account) {
+      redirect(
+        "/dashboard/automations/new?error=No+connected+Instagram+account+was+found.",
+      );
+    }
+
+    /* ========================================================
+       GET SELECTED POST
+    ======================================================== */
+
+    const {
+      data: post,
+      error: postError,
+    } = await supabase
+      .from(
+        "instagram_posts",
+      )
+      .select(
+        `
+        id,
+        instagram_media_id,
+        instagram_account_id
+        `,
+      )
+      .eq(
+        "id",
+        instagramPostId,
+      )
+      .eq(
+        "instagram_account_id",
+        account.id,
+      )
+      .maybeSingle();
+
+    if (postError) {
+      redirect(
+        `/dashboard/automations/new?error=${encodeURIComponent(
+          postError.message,
+        )}`,
+      );
+    }
+
+    if (!post) {
+      redirect(
+        "/dashboard/automations/new?error=Selected+Instagram+post+was+not+found.",
+      );
+    }
+
+    /* ========================================================
+       CHECK EXISTING AUTOMATIONS
+    ======================================================== */
+
+    const {
+      data: existingAutomations,
+      error: duplicateError,
+    } = await supabase
+      .from(
+        "instagram_automations",
+      )
+      .select(
+        `
+        id,
+        trigger_type,
+        trigger_keywords,
+        trigger_keyword
+        `,
+      )
+      .eq(
+        "user_id",
+        user.id,
+      )
+      .eq(
+        "instagram_account_id",
+        account.id,
+      )
+      .eq(
+        "instagram_post_id",
+        post.id,
+      );
+
+    if (duplicateError) {
+      redirect(
+        `/dashboard/automations/new?error=${encodeURIComponent(
+          duplicateError.message,
+        )}`,
+      );
+    }
+
+    const normalizedExisting =
+      existingAutomations ??
+      [];
+
+    const newKeywords =
+      triggerKeywords.map(
+        (keyword) =>
+          keyword.toLowerCase(),
+      );
+
+    /* ========================================================
+       CHECK DUPLICATE TRIGGER
+    ======================================================== */
+
+    const duplicate =
+      normalizedExisting.some(
+        (automation) => {
+          const existingType =
+            automation.trigger_type ||
+            "keywords";
+
+          if (
+            existingType !==
+            triggerType
+          ) {
+            return false;
+          }
+
+          /*
+           * Only one any-comment
+           * automation per post.
+           */
+
+          if (
+            triggerType ===
+            "any_comment"
+          ) {
+            return true;
+          }
+
+          const existingKeywords =
+            Array.isArray(
+              automation.trigger_keywords,
+            )
+              ? automation.trigger_keywords
+              : automation.trigger_keyword
+                ? [
+                  automation.trigger_keyword,
+                ]
+                : [];
+
+          const a = [
+            ...existingKeywords,
+          ]
+            .map((x) =>
+              String(x)
+                .trim()
+                .toLowerCase(),
+            )
+            .filter(Boolean)
+            .sort();
+
+          const b = [
+            ...newKeywords,
+          ]
+            .filter(Boolean)
+            .sort();
+
+          return (
+            a.length ===
+            b.length &&
+            a.every(
+              (
+                value,
+                index,
+              ) =>
+                value ===
+                b[index],
+            )
+          );
+        },
+      );
+
+    if (duplicate) {
+      redirect(
+        "/dashboard/automations/new?error=An+automation+with+the+same+trigger+already+exists+for+this+post.",
+      );
+    }
+
+    /* ========================================================
+       LEGACY KEYWORD
+    ======================================================== */
+
+    const legacyKeyword =
+      triggerType ===
+        "keywords"
+        ? triggerKeywords[0] ??
+        ""
+        : "";
+
+    /* ========================================================
+       CREATE AUTOMATION
+    ======================================================== */
+
+    console.log(
+      "CREATING INSTAGRAM AUTOMATION:",
+      {
+        name:
+          automationName,
+
+        userId:
+          user.id,
+
+        accountId:
+          account.id,
+
+        postId:
+          post.id,
+
+        instagramMediaId:
+          post.instagram_media_id,
+
+        triggerType,
+
+        triggerKeywords,
+
+        dmMessage,
+
+        replyEnabled,
+
+        replyText,
+
+        buttonName,
+
+        buttonUrl,
+
+        followupEnabled,
+
+        followupDelayMinutes,
+
+        followupMessage,
+
+        isActive,
+      },
+    );
+
+    const {
+      data:
+      createdAutomation,
+      error:
+      insertError,
+    } = await supabase
+      .from(
+        "instagram_automations",
+      )
+      .insert({
+        /* ==================================================
+           NAME
+        ================================================== */
+
+        name:
+          automationName,
+
+        /* ==================================================
+           OWNERSHIP
+        ================================================== */
+
+        user_id:
+          user.id,
+
+        instagram_account_id:
+          account.id,
+
+        /* ==================================================
+           INSTAGRAM POST
+        ================================================== */
+
+        instagram_post_id:
+          post.id,
+
+        /* ==================================================
+           TRIGGER
+        ================================================== */
+
+        trigger_type:
+          triggerType,
+
+        trigger_keywords:
+          triggerKeywords,
+
+        trigger_keyword:
+          legacyKeyword,
+
+        /* ==================================================
+           DM
+        ================================================== */
+
+        dm_message:
+          dmMessage,
+
+        /* ==================================================
+           PUBLIC REPLY
+        ================================================== */
+
+        reply_enabled:
+          replyEnabled,
+
+        reply_text:
+          replyEnabled &&
+            replyText
+            ? replyText
+            : null,
+
+        reply_texts:
+          replyEnabled &&
+            replyTexts.length >
+            0
+            ? replyTexts
+            : [],
+
+        /* ==================================================
+           BUTTON
+        ================================================== */
+
+        button_name:
+          buttonName ||
+          null,
+
+        button_url:
+          buttonUrl ||
+          null,
+
+        /* ==================================================
+           LINK FOLLOW-UP
+        ================================================== */
+
+        followup_enabled:
+          followupEnabled,
+
+        followup_delay_minutes:
+          followupEnabled
+            ? followupDelayMinutes
+            : 360,
+
+        followup_message:
+          followupEnabled &&
+            followupMessage
+            ? followupMessage
+            : null,
+
+        /* ==================================================
+           STATUS
+        ================================================== */
+
+        is_active:
+          isActive,
+      })
+      .select("*")
+      .single();
+
+    if (insertError) {
+      console.error(
+        "CREATE AUTOMATION INSERT ERROR:",
+        insertError,
+      );
+
+      redirect(
+        `/dashboard/automations/new?error=${encodeURIComponent(
+          insertError.message,
+        )}`,
+      );
+    }
+
+    console.log(
+      "INSTAGRAM AUTOMATION CREATED SUCCESSFULLY:",
+      {
+        id:
+          createdAutomation?.id,
+
+        name:
+          automationName,
+
+        postId:
+          post.id,
+
+        replyEnabled,
+
+        replyTexts,
+
+        replyText,
+      },
+    );
+
+    /* ========================================================
+       RETURN TO AUTOMATIONS
+    ======================================================== */
+
+    redirect(
+      "/dashboard/automations",
+    );
+  }
+
+  /* ==========================================================
+     LOAD CONNECTED ACCOUNT
+  ========================================================== */
+
+  const {
+    data: account,
+    error: accountError,
+  } = await supabase
+    .from(
+      "instagram_accounts",
+    )
+    .select(
+      `
+      id,
+      instagram_user_id,
+      username,
+      profile_picture_url
+      `,
+    )
+    .eq(
+      "user_id",
+      user.id,
+    )
+    .eq(
+      "is_connected",
+      true,
+    )
+    .order(
+      "connected_at",
+      {
+        ascending: false,
+      },
+    )
+    .limit(1)
+    .maybeSingle();
+
+  /* ==========================================================
+     LOAD POSTS
+  ========================================================== */
+
+  let posts: InstagramPost[] =
+    [];
+
+  let postsError:
+    | string
+    | null = null;
+
+  if (account) {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from(
+        "instagram_posts",
+      )
+      .select(
+        `
+        id,
+        instagram_media_id,
+        caption,
+        media_type,
+        media_url,
+        permalink,
+        published_at
+        `,
+      )
+      .eq(
+        "instagram_account_id",
+        account.id,
+      )
+      .order(
+        "published_at",
+        {
+          ascending: false,
+        },
+      )
+      .limit(50);
+
+    if (error) {
+      postsError =
+        error.message;
+    } else {
+      posts =
+        (data ??
+          []) as InstagramPost[];
+    }
+  }
+
+  /* ==========================================================
+     PAGE ERROR
+  ========================================================== */
+
+  const pageError =
+    params.error
+      ? decodeURIComponent(
+        params.error,
+      )
+      : null;
+
+  /* ==========================================================
+     RENDER
+  ========================================================== */
 
   return (
     <main className="min-h-screen bg-[#050505] text-white">
@@ -97,11 +891,11 @@ export default async function EditAutomationPage({
           </Link>
 
           <h1 className="mt-3 text-2xl font-bold">
-            Edit Automation
+            New Automation
           </h1>
 
           <p className="mt-1 text-sm text-gray-500">
-            Update your Instagram
+            Create an Instagram
             comment-to-DM automation.
           </p>
 
@@ -122,20 +916,20 @@ export default async function EditAutomationPage({
         {(pageError ||
           accountError ||
           postsError) && (
-          <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 p-5">
+            <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 p-5">
 
-            <h2 className="font-semibold text-red-300">
-              Unable to load automation form
-            </h2>
+              <h2 className="font-semibold text-red-300">
+                Unable to load automation form
+              </h2>
 
-            <p className="mt-2 whitespace-pre-wrap break-words text-sm text-red-200/70">
-              {pageError ||
-                accountError?.message ||
-                postsError}
-            </p>
+              <p className="mt-2 whitespace-pre-wrap break-words text-sm text-red-200/70">
+                {pageError ||
+                  accountError?.message ||
+                  postsError}
+              </p>
 
-          </div>
-        )}
+            </div>
+          )}
 
         {/* ====================================================
             NO ACCOUNT
@@ -153,7 +947,8 @@ export default async function EditAutomationPage({
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-yellow-100/60">
-              The Instagram account connected to this automation is no longer active.
+              No active Instagram
+              account was found.
             </p>
 
             <Link
@@ -226,7 +1021,7 @@ export default async function EditAutomationPage({
                 <form
                   id="new-automation-form"
                   action={
-                    updateAutomation
+                    createAutomation
                   }
                   className="rounded-3xl border border-white/[0.07] bg-[#0b0b0b] p-5 sm:p-8"
                 >
@@ -261,7 +1056,6 @@ export default async function EditAutomationPage({
                       name="name"
                       required
                       maxLength={100}
-                      defaultValue={automationData.name ?? ""}
                       placeholder="Course Launch Comments"
                       className="w-full rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
                     />
@@ -295,7 +1089,7 @@ export default async function EditAutomationPage({
                     </p>
 
                     {posts.length ===
-                    0 ? (
+                      0 ? (
                       <div className="mt-5 rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-5">
 
                         <p className="font-medium text-yellow-200">
@@ -304,7 +1098,10 @@ export default async function EditAutomationPage({
                         </p>
 
                         <p className="mt-2 text-sm text-yellow-100/50">
-                          The Instagram posts for this account could not be loaded.
+                          Sync your
+                          Instagram posts
+                          from the dashboard
+                          first.
                         </p>
 
                         <Link
@@ -328,13 +1125,6 @@ export default async function EditAutomationPage({
 
                         <PostSelector
                           posts={posts}
-                          initialPost={
-                            posts.find(
-                              (post) =>
-                                post.id ===
-                                automationData.instagram_post_id
-                            ) ?? null
-                          }
                         />
 
                       </div>
@@ -369,9 +1159,7 @@ export default async function EditAutomationPage({
                           type="radio"
                           name="trigger_type"
                           value="keywords"
-                          defaultChecked={
-                            currentTriggerType === "keywords"
-                          }
+                          defaultChecked
                           className="mt-1 h-4 w-4 accent-[#ff1744]"
                         />
 
@@ -398,9 +1186,6 @@ export default async function EditAutomationPage({
                           type="radio"
                           name="trigger_type"
                           value="any_comment"
-                          defaultChecked={
-                            currentTriggerType === "any_comment"
-                          }
                           className="mt-1 h-4 w-4 accent-[#ff1744]"
                         />
 
@@ -436,7 +1221,6 @@ export default async function EditAutomationPage({
                         name="trigger_keywords"
                         rows={4}
                         maxLength={1000}
-                        defaultValue={currentKeywords.join(", ")}
                         placeholder="link, price, details"
                         className="w-full resize-y rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm leading-6 outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
                       />
@@ -483,7 +1267,6 @@ export default async function EditAutomationPage({
                       required
                       rows={7}
                       maxLength={2000}
-                      defaultValue={automationData.dm_message}
                       placeholder={`Hey! 👋
 
 Thanks for commenting!
@@ -512,7 +1295,6 @@ https://example.com`}
                           id="button_name"
                           name="button_name"
                           maxLength={20}
-                          defaultValue={automationData.button_name ?? ""}
                           placeholder="Get Course"
                           className="w-full rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
                         />
@@ -532,7 +1314,6 @@ https://example.com`}
                           id="button_url"
                           name="button_url"
                           type="url"
-                          defaultValue={automationData.button_url ?? ""}
                           placeholder="https://example.com"
                           className="w-full rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
                         />
@@ -566,17 +1347,12 @@ https://example.com`}
                           type="checkbox"
                           name="reply_enabled"
                           value="true"
-                          defaultChecked={
-                            automationData.reply_enabled ?? false
-                          }
                           className="h-5 w-5 accent-[#ff1744]"
                         />
 
                       </label>
 
-                      <ReplyFieldsEditor
-                        initialReplies={currentReplyTexts}
-                      />
+                      <ReplyFieldsEditor />
 
                     </div>
 
@@ -610,7 +1386,6 @@ https://example.com`}
                       <input
                         type="checkbox"
                         name="followup_enabled"
-                        defaultChecked={Boolean(automationData.followup_enabled)}
                         className="mt-1 h-5 w-5 shrink-0 accent-[#ff1744]"
                       />
 
@@ -632,9 +1407,7 @@ https://example.com`}
                         <select
                           id="followup_delay_minutes"
                           name="followup_delay_minutes"
-                          defaultValue={String(
-                            automationData.followup_delay_minutes ?? 360
-                          )}
+                          defaultValue="360"
                           className="w-full rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm text-white outline-none focus:border-[#ff1744]"
                         >
 
@@ -677,7 +1450,6 @@ https://example.com`}
                           id="followup_message"
                           name="followup_message"
                           rows={4}
-                          defaultValue={automationData.followup_message ?? ""}
                           maxLength={2000}
                           placeholder="If you're still curious, don't forget to tap the link ⬆️ I think you’ll love it ❤️"
                           className="w-full resize-y rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-4 py-3 text-sm leading-6 outline-none placeholder:text-gray-700 focus:border-[#ff1744]"
@@ -726,7 +1498,7 @@ https://example.com`}
                       </div>
 
                       <AutomationStatusToggle
-                        defaultChecked={automationData.is_active}
+                        defaultChecked={true}
                       />
 
                     </div>
@@ -748,9 +1520,13 @@ https://example.com`}
 
                     <button
                       type="submit"
+                      disabled={
+                        posts.length ===
+                        0
+                      }
                       className="rounded-xl bg-[#ff1744] px-6 py-3 text-sm font-semibold hover:bg-[#e9143d] disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      Save Changes
+                      Create Automation
                     </button>
 
                   </div>
