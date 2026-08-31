@@ -409,6 +409,7 @@ export async function POST() {
       caption: string | null;
       media_type: string | null;
       media_url: string | null;
+      thumbnail_url: string | null;
       permalink: string | null;
       published_at: string | null;
       likes_count: number;
@@ -456,9 +457,10 @@ export async function POST() {
           null,
 
         media_url:
-          media.media_url ??
-          media.thumbnail_url ??
-          null,
+          media.media_url ?? null,
+
+        thumbnail_url:
+          media.thumbnail_url ?? null,
 
         permalink:
           media.permalink ??

@@ -8,6 +8,7 @@ type Post = {
   caption: string | null;
   media_type: string | null;
   media_url: string | null;
+  thumbnail_url: string | null;
   permalink: string | null;
   published_at: string | null;
   likes_count: number | null;
@@ -98,7 +99,13 @@ export default function PostsGrid({
                   src={
                     post.media_url ?? ""
                   }
+                  poster={
+                    post.thumbnail_url ??
+                    undefined
+                  }
                   muted
+                  playsInline
+                  preload="metadata"
                   className="
                     h-full
                     w-full
@@ -306,7 +313,13 @@ export default function PostsGrid({
                     selectedPost.media_url ??
                     ""
                   }
+                  poster={
+                    selectedPost.thumbnail_url ??
+                    undefined
+                  }
                   controls
+                  playsInline
+                  preload="metadata"
                   className="
                     max-h-[80vh]
                     max-w-full
