@@ -8,7 +8,7 @@ type Post = {
   caption: string | null;
   media_type: string | null;
   media_url: string | null;
-  thumbnail_url: string | null;
+  thumbnail_url?: string | null;
   permalink: string | null;
   published_at: string | null;
   likes_count: number | null;
