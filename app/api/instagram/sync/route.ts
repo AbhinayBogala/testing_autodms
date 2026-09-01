@@ -697,24 +697,199 @@ export async function POST() {
     }
 
     // =========================================================
-    // 7. IMPORTANT:
-    // DO NOT DELETE OLD POSTS
+    // 7. RECONCILE DELETED INSTAGRAM POSTS / REELS
     // =========================================================
     //
-    // We intentionally do NOT compare the fetched posts
-    // against all database posts.
+    // IMPORTANT:
+    // This runs ONLY after the complete Instagram pagination
+    // finished successfully.
     //
-    // Why?
+    // If a post/reel is no longer returned by Instagram, it is
+    // considered deleted from Instagram and is removed locally.
     //
-    // A post missing from the current API response does NOT
-    // necessarily mean Instagram deleted it.
+    // Before deleting the instagram_posts row, we unlink any
+    // instagram_automations that point to it. The automation
+    // itself is NEVER deleted.
     //
-    // Also, deleting/recreating posts can break automation
-    // references.
+    // analytics_events uses ON DELETE SET NULL, so historical
+    // analytics remain safe.
     //
-    // A separate cleanup/reconciliation process can handle
-    // confirmed deleted posts later.
-    //
+    // =========================================================
+
+    const fetchedMediaIds = new Set(
+      posts.map(
+        (post) => post.instagram_media_id
+      )
+    );
+
+    const {
+      data: existingPosts,
+      error: existingPostsError,
+    } = await admin
+      .from("instagram_posts")
+      .select(
+        "id, instagram_media_id"
+      )
+      .eq(
+        "instagram_account_id",
+        account.id
+      );
+
+    if (existingPostsError) {
+      console.error(
+        "FAILED TO LOAD EXISTING INSTAGRAM POSTS:",
+        existingPostsError
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Failed to compare existing Instagram posts",
+          details:
+            existingPostsError.message,
+          refreshError,
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    const deletedPosts =
+      (existingPosts ?? []).filter(
+        (existingPost) =>
+          !fetchedMediaIds.has(
+            String(
+              existingPost.instagram_media_id
+            )
+          )
+      );
+
+    let deletedPostsCount = 0;
+    let unlinkedAutomationsCount = 0;
+
+    if (deletedPosts.length > 0) {
+      const deletedPostIds =
+        deletedPosts.map(
+          (post) => post.id
+        );
+
+      // ---------------------------------------------------------
+      // UNLINK AUTOMATIONS FIRST
+      // ---------------------------------------------------------
+      //
+      // Do NOT delete the automation.
+      // Only remove its connection to the deleted post.
+      //
+      const {
+        data: unlinkedAutomations,
+        error: unlinkAutomationError,
+      } = await admin
+        .from("instagram_automations")
+        .update({
+          instagram_post_id: null,
+          updated_at:
+            new Date().toISOString(),
+        })
+        .eq(
+          "instagram_account_id",
+          account.id
+        )
+        .in(
+          "instagram_post_id",
+          deletedPostIds
+        )
+        .select("id");
+
+      if (unlinkAutomationError) {
+        console.error(
+          "FAILED TO UNLINK AUTOMATIONS FROM DELETED POSTS:",
+          unlinkAutomationError
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Failed to safely unlink automations from deleted Instagram posts",
+            details:
+              unlinkAutomationError.message,
+            refreshError,
+          },
+          {
+            status: 500,
+          }
+        );
+      }
+
+      unlinkedAutomationsCount =
+        unlinkedAutomations?.length ?? 0;
+
+      // ---------------------------------------------------------
+      // DELETE LOCAL POST ROWS
+      // ---------------------------------------------------------
+      //
+      // automation_posts, if present, will follow its database
+      // foreign-key behavior. analytics_events will keep the
+      // historical event and set instagram_post_id to NULL.
+      //
+      const {
+        data: deletedRows,
+        error: deletePostsError,
+      } = await admin
+        .from("instagram_posts")
+        .delete()
+        .eq(
+          "instagram_account_id",
+          account.id
+        )
+        .in(
+          "id",
+          deletedPostIds
+        )
+        .select("id");
+
+      if (deletePostsError) {
+        console.error(
+          "FAILED TO DELETE DELETED INSTAGRAM POSTS:",
+          deletePostsError
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Failed to remove deleted Instagram posts",
+            details:
+              deletePostsError.message,
+            refreshError,
+            unlinkedAutomations:
+              unlinkedAutomationsCount,
+          },
+          {
+            status: 500,
+          }
+        );
+      }
+
+      deletedPostsCount =
+        deletedRows?.length ?? 0;
+
+      console.log(
+        "DELETED INSTAGRAM POSTS RECONCILED:",
+        {
+          accountId: account.id,
+          deletedPosts:
+            deletedPostsCount,
+          unlinkedAutomations:
+            unlinkedAutomationsCount,
+        }
+      );
+    }
+
+    // =========================================================
+    // 8. SYNC RESULT
     // =========================================================
 
     const syncDurationMs =
@@ -763,6 +938,12 @@ export async function POST() {
       postsSynced:
         synced,
 
+      deletedPosts:
+        deletedPostsCount,
+
+      unlinkedAutomations:
+        unlinkedAutomationsCount,
+
       pagesFetched,
 
       durationMs:
@@ -810,8 +991,12 @@ export async function POST() {
 
       pagesFetched,
 
-      // Important behavior
-      deletedPosts: 0,
+      // Reconciliation
+      deletedPosts:
+        deletedPostsCount,
+
+      unlinkedAutomations:
+        unlinkedAutomationsCount,
 
       commentsSynced: 0,
 

@@ -32,6 +32,10 @@ type Automation = {
   dm_message: string | null;
   reply_enabled: boolean | null;
   reply_text: string | null;
+  reply_texts: string[] | null;
+  followup_enabled: boolean | null;
+  followup_delay_minutes: number | null;
+  followup_message: string | null;
   button_name: string | null;
   button_url: string | null;
   is_active: boolean;
@@ -87,6 +91,10 @@ type AutomationForm = {
   dm_message: string;
   reply_enabled: boolean;
   reply_text: string;
+  reply_texts: string[];
+  followup_enabled: boolean;
+  followup_delay_minutes: number;
+  followup_message: string;
   button_name: string;
   button_url: string;
   is_active: boolean;
@@ -350,6 +358,10 @@ const EMPTY_AUTOMATION_FORM: AutomationForm = {
   dm_message: "",
   reply_enabled: false,
   reply_text: "",
+  reply_texts: [""],
+  followup_enabled: false,
+  followup_delay_minutes: 360,
+  followup_message: "",
   button_name: "",
   button_url: "",
   is_active: true,
@@ -400,6 +412,15 @@ function automationToForm(automation: Automation): AutomationForm {
     dm_message: automation.dm_message ?? "",
     reply_enabled: Boolean(automation.reply_enabled),
     reply_text: automation.reply_text ?? "",
+    reply_texts:
+      Array.isArray(automation.reply_texts) && automation.reply_texts.length > 0
+        ? automation.reply_texts
+        : automation.reply_text
+          ? [automation.reply_text]
+          : [""],
+    followup_enabled: Boolean(automation.followup_enabled),
+    followup_delay_minutes: automation.followup_delay_minutes ?? 360,
+    followup_message: automation.followup_message ?? "",
     button_name: automation.button_name ?? "",
     button_url: automation.button_url ?? "",
     is_active: Boolean(automation.is_active),
@@ -1207,6 +1228,32 @@ function ScheduleComposer({
       return;
     }
 
+    const replyTexts = Array.from(
+      new Set(
+        automationForm.reply_texts
+          .map((reply) => reply.trim())
+          .filter(Boolean)
+          .slice(0, 20),
+      ),
+    );
+
+    if (automationForm.reply_enabled && replyTexts.length === 0) {
+      setAutomationError("Please add at least one public reply message.");
+      return;
+    }
+
+    if (
+      automationForm.followup_enabled &&
+      (!automationForm.button_name.trim() ||
+        !automationForm.button_url.trim() ||
+        !automationForm.followup_message.trim())
+    ) {
+      setAutomationError(
+        "Follow-up requires a button name, button URL, and follow-up message.",
+      );
+      return;
+    }
+
     setAutomationSaving(true);
 
     try {
@@ -1225,9 +1272,13 @@ function ScheduleComposer({
           triggerKeyword: keywords[0] ?? null,
           dmMessage: automationForm.dm_message.trim(),
           replyEnabled: automationForm.reply_enabled,
-          replyText: automationForm.reply_text.trim(),
+          replyText: replyTexts[0] ?? "",
+          replyTexts: automationForm.reply_enabled ? replyTexts : [],
           buttonName: automationForm.button_name.trim(),
           buttonUrl: automationForm.button_url.trim(),
+          followupEnabled: automationForm.followup_enabled,
+          followupDelayMinutes: automationForm.followup_delay_minutes,
+          followupMessage: automationForm.followup_message.trim(),
           isActive: automationForm.is_active,
           source: "scheduler",
           schedulerMode: true,
@@ -1301,6 +1352,32 @@ function ScheduleComposer({
       return;
     }
 
+    const replyTexts = Array.from(
+      new Set(
+        automationForm.reply_texts
+          .map((reply) => reply.trim())
+          .filter(Boolean)
+          .slice(0, 20),
+      ),
+    );
+
+    if (automationForm.reply_enabled && replyTexts.length === 0) {
+      setAutomationError("Please add at least one public reply message.");
+      return;
+    }
+
+    if (
+      automationForm.followup_enabled &&
+      (!automationForm.button_name.trim() ||
+        !automationForm.button_url.trim() ||
+        !automationForm.followup_message.trim())
+    ) {
+      setAutomationError(
+        "Follow-up requires a button name, button URL, and follow-up message.",
+      );
+      return;
+    }
+
     setAutomationSaving(true);
 
     try {
@@ -1320,9 +1397,13 @@ function ScheduleComposer({
             triggerKeyword: keywords[0] ?? null,
             dmMessage: automationForm.dm_message.trim(),
             replyEnabled: automationForm.reply_enabled,
-            replyText: automationForm.reply_text.trim(),
+            replyText: replyTexts[0] ?? "",
+            replyTexts: automationForm.reply_enabled ? replyTexts : [],
             buttonName: automationForm.button_name.trim(),
             buttonUrl: automationForm.button_url.trim(),
+            followupEnabled: automationForm.followup_enabled,
+            followupDelayMinutes: automationForm.followup_delay_minutes,
+            followupMessage: automationForm.followup_message.trim(),
             isActive: automationForm.is_active,
           }),
         },
@@ -2151,6 +2232,40 @@ function InlineAutomationEditor({
     }));
   }
 
+  function updateReply(index: number, value: string) {
+    setForm((current) => ({
+      ...current,
+      reply_texts: current.reply_texts.map((reply, replyIndex) =>
+        replyIndex === index ? value : reply,
+      ),
+      reply_text:
+        index === 0 ? value : current.reply_text,
+    }));
+  }
+
+  function addReply() {
+    setForm((current) => ({
+      ...current,
+      reply_texts: [...current.reply_texts, ""],
+    }));
+  }
+
+  function removeReply(index: number) {
+    setForm((current) => {
+      const next = current.reply_texts.filter(
+        (_, replyIndex) => replyIndex !== index,
+      );
+
+      const replies = next.length > 0 ? next : [""];
+
+      return {
+        ...current,
+        reply_texts: replies,
+        reply_text: replies[0] ?? "",
+      };
+    });
+  }
+
   return (
     <div className="space-y-5">
       <div>
@@ -2218,14 +2333,14 @@ function InlineAutomationEditor({
         />
       </div>
 
-      <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
+      <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
         <label className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-medium text-gray-300">
               Public Reply
             </p>
             <p className="mt-1 text-xs text-gray-600">
-              Reply publicly to the Instagram comment.
+              Add multiple replies. They rotate automatically.
             </p>
           </div>
           <input
@@ -2239,13 +2354,109 @@ function InlineAutomationEditor({
         </label>
 
         {form.reply_enabled && (
-          <textarea
-            rows={3}
-            value={form.reply_text}
-            onChange={(event) => update("reply_text", event.target.value)}
-            placeholder="Thanks for your comment! Check your DM."
-            className="mt-3 w-full resize-none rounded-xl border border-white/[0.08] bg-[#111111] p-3 text-sm text-white outline-none placeholder:text-gray-700 focus:border-[#ff1744]/50"
+          <div className="mt-4 space-y-3">
+            {form.reply_texts.map((reply, index) => (
+              <div
+                key={`scheduler-reply-${index}`}
+                className="rounded-2xl border border-white/[0.07] bg-[#070707] p-4"
+              >
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <label className="text-xs font-medium text-gray-400">
+                    Reply {index + 1}
+                  </label>
+                  {form.reply_texts.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeReply(index)}
+                      className="text-xs text-gray-600 hover:text-red-400"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <textarea
+                  rows={4}
+                  maxLength={1000}
+                  value={reply}
+                  onChange={(event) => updateReply(index, event.target.value)}
+                  placeholder="Thanks for commenting ❤️"
+                  className="w-full resize-y rounded-xl border border-white/[0.08] bg-[#0b0b0b] p-3 text-sm leading-6 text-white outline-none placeholder:text-gray-700 focus:border-[#ff1744]/40"
+                />
+              </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={addReply}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-2.5 text-xs font-medium text-gray-400 hover:border-[#ff1744]/20 hover:text-white"
+            >
+              <span className="text-base leading-none">+</span>
+              Add Reply
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
+        <label className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-gray-300">
+              Follow up if the link isn&apos;t opened
+            </p>
+            <p className="mt-1 text-xs leading-5 text-gray-600">
+              Track clicks on the Custom DM Button and send one reminder if it is not opened.
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            checked={form.followup_enabled}
+            onChange={(event) =>
+              update("followup_enabled", event.target.checked)
+            }
+            className="mt-1 h-5 w-5 shrink-0 accent-[#ff1744]"
           />
+        </label>
+
+        {form.followup_enabled && (
+          <div className="mt-5 space-y-4">
+            <div>
+              <label className="mb-2 block text-xs font-medium text-gray-400">
+                Send reminder after
+              </label>
+              <select
+                value={String(form.followup_delay_minutes)}
+                onChange={(event) =>
+                  update(
+                    "followup_delay_minutes",
+                    Number(event.target.value),
+                  )
+                }
+                className="h-11 w-full rounded-xl border border-white/[0.08] bg-[#111111] px-3 text-sm text-white outline-none focus:border-[#ff1744]/50"
+              >
+                <option value="60">1 hour</option>
+                <option value="180">3 hours</option>
+                <option value="360">6 hours</option>
+                <option value="720">12 hours</option>
+                <option value="1380">23 hours</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-xs font-medium text-gray-400">
+                Follow-up message
+              </label>
+              <textarea
+                rows={4}
+                maxLength={2000}
+                value={form.followup_message}
+                onChange={(event) =>
+                  update("followup_message", event.target.value)
+                }
+                placeholder="If you're still curious, don't forget to tap the link ⬆️"
+                className="w-full resize-y rounded-xl border border-white/[0.08] bg-[#111111] p-3 text-sm leading-6 text-white outline-none placeholder:text-gray-700 focus:border-[#ff1744]/50"
+              />
+            </div>
+          </div>
         )}
       </div>
 
@@ -2387,10 +2598,34 @@ function AutomationPreviewModal({
           {automation.reply_enabled && (
             <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
               <p className="text-[10px] uppercase tracking-[0.12em] text-gray-600">
-                Public Reply
+                Public Reply Messages
+              </p>
+              <div className="mt-3 space-y-2">
+                {(Array.isArray(automation.reply_texts) && automation.reply_texts.length > 0
+                  ? automation.reply_texts
+                  : automation.reply_text
+                    ? [automation.reply_text]
+                    : []
+                ).map((reply, index) => (
+                  <div key={`preview-reply-${index}`} className="rounded-lg bg-white/[0.025] px-3 py-2 text-sm text-gray-300">
+                    <span className="mr-2 text-[10px] text-gray-600">Reply {index + 1}</span>
+                    <span className="whitespace-pre-wrap">{reply}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {automation.followup_enabled && (
+            <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-gray-600">
+                Link Follow-up
+              </p>
+              <p className="mt-2 text-xs text-gray-500">
+                Reminder after {automation.followup_delay_minutes ?? 360} minutes
               </p>
               <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-300">
-                {automation.reply_text || "No reply configured."}
+                {automation.followup_message || "No follow-up message configured."}
               </p>
             </div>
           )}

@@ -125,8 +125,12 @@ export default async function SchedulerPage() {
       dm_message,
       reply_enabled,
       reply_text,
+      reply_texts,
       button_name,
       button_url,
+      followup_enabled,
+      followup_delay_minutes,
+      followup_message,
       is_active
       `
     )
